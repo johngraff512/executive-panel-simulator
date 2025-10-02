@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Executive Panel Simulator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-primary mb-4">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1">
+                <i class="fas fa-users-cog"></i>
+                AI Executive Panel Simulator
+            </span>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Setup Phase -->
+        <div id="setup-phase" class="phase active">
+            <div class="row">
+                <div class="col-md-8 mx-auto">
+                    <div class="card shadow">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="mb-0">
+                                <i class="fas fa-cog"></i>
+                                Presentation Setup
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="setup-form">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="company-name" class="form-label">Company Name</label>
+                                            <input type="text" class="form-control" id="company-name" 
+                                                   placeholder="e.g., Tesla, Amazon, Local Startup" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="industry" class="form-label">Industry</label>
+                                            <select class="form-select" id="industry" required>
+                                                <option value="">Select Industry</option>
+                                                <option value="Technology">Technology</option>
+                                                <option value="Healthcare">Healthcare</option>
+                                                <option value="Finance">Finance</option>
+                                                <option value="Retail">Retail</option>
+                                                <option value="Manufacturing">Manufacturing</option>
+                                                <option value="Energy">Energy</option>
+                                                <option value="Education">Education</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="presentation-topic" class="form-label">Presentation Topic/Proposal</label>
+                                    <textarea class="form-control" id="presentation-topic" rows="3" 
+                                              placeholder="Describe your proposal, strategy, or initiative..." required></textarea>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label">Select Executive Panel Members</label>
+                                    <div class="executive-grid">
+                                        <div class="executive-card" data-role="CEO">
+                                            <input type="checkbox" id="exec-ceo" value="CEO">
+                                            <label for="exec-ceo">
+                                                <div class="exec-icon"><i class="fas fa-crown"></i></div>
+                                                <div class="exec-info">
+                                                    <strong>CEO</strong>
+                                                    <small>Strategy & Vision</small>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        <div class="executive-card" data-role="CFO">
+                                            <input type="checkbox" id="exec-cfo" value="CFO">
+                                            <label for="exec-cfo">
+                                                <div class="exec-icon"><i class="fas fa-chart-line"></i></div>
+                                                <div class="exec-info">
+                                                    <strong>CFO</strong>
+                                                    <small>Financial Impact</small>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        <div class="executive-card" data-role="CTO">
+                                            <input type="checkbox" id="exec-cto" value="CTO">
+                                            <label for="exec-cto">
+                                                <div class="exec-icon"><i class="fas fa-microchip"></i></div>
+                                                <div class="exec-info">
+                                                    <strong>CTO</strong>
+                                                    <small>Technical Feasibility</small>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        <div class="executive-card" data-role="CMO">
+                                            <input type="checkbox" id="exec-cmo" value="CMO">
+                                            <label for="exec-cmo">
+                                                <div class="exec-icon"><i class="fas fa-bullhorn"></i></div>
+                                                <div class="exec-info">
+                                                    <strong>CMO</strong>
+                                                    <small>Market & Customers</small>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        <div class="executive-card" data-role="COO">
+                                            <input type="checkbox" id="exec-coo" value="COO">
+                                            <label for="exec-coo">
+                                                <div class="exec-icon"><i class="fas fa-cogs"></i></div>
+                                                <div class="exec-info">
+                                                    <strong>COO</strong>
+                                                    <small>Operations & Implementation</small>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="d-grid">
+                                    <button type="submit" class="btn btn-primary btn-lg">
+                                        <i class="fas fa-play"></i>
+                                        Start Presentation
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Simulation Phase -->
+        <div id="simulation-phase" class="phase">
+            <div class="row">
+                <!-- Executive Panel -->
+                <div class="col-md-4">
+                    <div class="card shadow sticky-top">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-users"></i>
+                                Executive Panel
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="executive-list">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conversation Area -->
+                <div class="col-md-8">
+                    <div class="card shadow">
+                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-comments"></i>
+                                Presentation Simulation
+                            </h5>
+                            <button id="end-session-btn" class="btn btn-outline-light btn-sm">
+                                <i class="fas fa-stop"></i>
+                                End Session
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="conversation-area" class="conversation-container">
+                                <!-- Conversation messages will appear here -->
+                            </div>
+
+                            <div id="response-area" class="mt-3" style="display: none;">
+                                <div class="input-group">
+                                    <textarea id="student-response" class="form-control" 
+                                              placeholder="Type your response to the executive..." rows="3"></textarea>
+                                    <button id="send-response-btn" class="btn btn-primary" type="button">
+                                        <i class="fas fa-paper-plane"></i>
+                                        Send
+                                    </button>
+                                </div>
+                                <small class="text-muted">Tip: Be specific with data and examples when possible</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Phase -->
+        <div id="summary-phase" class="phase">
+            <div class="row">
+                <div class="col-md-10 mx-auto">
+                    <div class="card shadow">
+                        <div class="card-header bg-warning text-dark">
+                            <h3 class="mb-0">
+                                <i class="fas fa-chart-bar"></i>
+                                Session Summary & Feedback
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="session-summary">
+                                <!-- Summary content populated dynamically -->
+                            </div>
+
+                            <div class="mt-4 text-center">
+                                <button id="new-session-btn" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-redo"></i>
+                                    Start New Session
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Modal -->
+    <div class="modal fade" id="loadingModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3">AI Executives are preparing their questions...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
