@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Executive Panel Simulator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .phase { display: none; animation: fadeIn 0.5s ease-in; }
+        .phase.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        .executive-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .executive-card {
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            background: white;
+            transition: all 0.3s ease;
+        }
+        
+        .executive-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .executive-card input[type="checkbox"] { display: none; }
+        
+        .executive-card label {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            cursor: pointer;
+            margin-bottom: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .executive-card input[type="checkbox"]:checked + label {
+            background: linear-gradient(135deg, #0d6efd, #4dabf7);
+            color: white;
+            border-radius: 6px;
+        }
+        
+        .exec-icon {
+            font-size: 2rem;
+            margin-right: 1rem;
+            min-width: 3rem;
+            text-align: center;
+        }
+        
+        .conversation-container {
+            height: 500px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+            background: white;
+        }
+        
+        .message {
+            margin-bottom: 1.5rem;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .message.executive .message-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .message.student .message-header {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .executive-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            margin-right: 0.75rem;
+        }
+        
+        .student-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #198754;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            margin-left: 0.75rem;
+        }
+        
+        .avatar-CEO { background: #8b5a3c; }
+        .avatar-CFO { background: #2e8b57; }
+        .avatar-CTO { background: #4169e1; }
+        .avatar-CMO { background: #ff6347; }
+        .avatar-COO { background: #9370db; }
+        
+        .message-bubble {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            padding: 1rem;
+            max-width: 80%;
+            position: relative;
+        }
+        
+        .message.executive .message-bubble {
+            margin-left: 0;
+            border-left: 4px solid #0d6efd;
+        }
+        
+        .message.student .message-bubble {
+            margin-left: auto;
+            background: #198754;
+            color: white;
+            border-left: none;
+            border-right: 4px solid #0d5128;
+        }
+        
+        .message-time {
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-top: 0.5rem;
+        }
+        
+        .message.student .message-time {
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .loading-message {
+            text-align: center;
+            padding: 2rem;
+            color: #6c757d;
+        }
+        
+        .executive-member {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid transparent;
+        }
+        
+        .executive-member.active {
+            background: #e3f2fd;
+            border-left-color: #0d6efd;
+        }
+        
+        .executive-member .avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.9rem;
+            margin-right: 0.75rem;
+        }
+        
+        .executive-member .info .name {
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .executive-member .info .title {
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+        
+        #student-response {
+            border-radius: 8px;
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .sticky-top { position: sticky; top: 20px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-primary mb-4">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1">
+                <i class="fas fa-users-cog"></i>
+                AI Executive Panel Simulator
+            </span>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Setup Phase -->
+        <div id="setup-phase" class="phase active">
+            <div class="row">
+                <div class="col-md-8 mx-auto">
+                    <div class="card shadow">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="mb-0">
+                                <i class="fas fa-cog"></i>
+                                Presentation Setup
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="setup-form">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="company-name" class="form-label">Company Name</label>
+                                            <input type="text" class="form-control" id="company-name" 
+                                                   placeholder="e.g., Tesla, Amazon, Local Startup" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="industry" class="form-label">Industry</label>
+                                            <select class="form-select" id="industry" required>
+                                                <option value="">Select Industry</option>
+                                                <option value="Technology">Technology</option>
+                                                <option value="Healthcare">Healthcare</option>
+                                                <option value="Finance">Finance</option>
+                                                <option value="Retail">Retail</option>
+                                                <option value="Manufacturing">Manufacturing</option>
+                                                <option value="Energy">Energy</option>
+                                                <option value="Education">Education</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="presentation-topic" class="form-label">Presentation Topic/Proposal</label>
+                                    <textarea class="form-control" id="presentation-topic" rows="3" 
+                                              placeholder="Describe your proposal, strategy, or initiative..." required></textarea>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label">Select Executive Panel Members</label>
+                                    <div class="executive-grid">
+                                        <div class="executive-card" data-role="CEO">
+                                            <input type="checkbox" id="exec-ceo" value="CEO">
+                                            <label for="exec-ceo">
+                                                <div class="exec-icon"><i class="fas fa-crown"></i></div>
+                                                <div class="exec-info">
+                                                    <strong>CEO</strong>
+                                                    <small>Strategy & Vision</small>
+                                                </div>
+                                            </label>
+                                        </div>
+                                        
+                                        <div class="executive-card" data-role="CFO">
+                                            <input type="checkbox" id="exec-cfo" value="CFO">
+                                            <label for="exec-cfo">
+                                                <div class="exec-icon"><i class="fas fa-chart-line"></i></div>
+                                                <div class="exec-info">
+                                                    <strong>CFO</strong>
+                                                    <small>Financial Impact</small>
+                                                </div>
+                                            </label>
+                                        </div>
+                                        
+                                        <div class="executive-card" data-role="CTO">
+                                            <input type="checkbox" id="exec-cto" value="CTO">
+                                            <label for="exec-cto">
+                                                <div class="exec-icon"><i class="fas fa-microchip"></i></div>
+                                                <div class="exec-info">
+                                                    <strong>CTO</strong>
+                                                    <small>Technical Feasibility</small>
+                                                </div>
+                                            </label>
+                                        </div>
+                                        
+                                        <div class="executive-card" data-role="CMO">
+                                            <input type="checkbox" id="exec-cmo" value="CMO">
+                                            <label for="exec-cmo">
+                                                <div class="exec-icon"><i class="fas fa-bullhorn"></i></div>
+                                                <div class="exec-info">
+                                                    <strong>CMO</strong>
+                                                    <small>Market & Customers</small>
+                                                </div>
+                                            </label>
+                                        </div>
+                                        
+                                        <div class="executive-card" data-role="COO">
+                                            <input type="checkbox" id="exec-coo" value="COO">
+                                            <label for="exec-coo">
+                                                <div class="exec-icon"><i class="fas fa-cogs"></i></div>
+                                                <div class="exec-info">
+                                                    <strong>COO</strong>
+                                                    <small>Operations & Implementation</small>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="d-grid">
+                                    <button type="submit" class="btn btn-primary btn-lg">
+                                        <i class="fas fa-play"></i>
+                                        Start Presentation
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Simulation Phase -->
+        <div id="simulation-phase" class="phase">
+            <div class="row">
+                <!-- Executive Panel -->
+                <div class="col-md-4">
+                    <div class="card shadow sticky-top">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-users"></i>
+                                Executive Panel
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="executive-list">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conversation Area -->
+                <div class="col-md-8">
+                    <div class="card shadow">
+                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-comments"></i>
+                                Presentation Simulation
+                            </h5>
+                            <button id="end-session-btn" class="btn btn-outline-light btn-sm">
+                                <i class="fas fa-stop"></i>
+                                End Session
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="conversation-area" class="conversation-container">
+                                <!-- Conversation messages will appear here -->
+                            </div>
+                            
+                            <div id="response-area" class="mt-3" style="display: none;">
+                                <div class="input-group">
+                                    <textarea id="student-response" class="form-control" 
+                                              placeholder="Type your response to the executive..." rows="3"></textarea>
+                                    <button id="send-response-btn" class="btn btn-primary" type="button">
+                                        <i class="fas fa-paper-plane"></i>
+                                        Send
+                                    </button>
+                                </div>
+                                <small class="text-muted">Tip: Be specific with data and examples when possible</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Phase -->
+        <div id="summary-phase" class="phase">
+            <div class="row">
+                <div class="col-md-10 mx-auto">
+                    <div class="card shadow">
+                        <div class="card-header bg-warning text-dark">
+                            <h3 class="mb-0">
+                                <i class="fas fa-chart-bar"></i>
+                                Session Summary & Feedback
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="session-summary">
+                                <!-- Summary content populated dynamically -->
+                            </div>
+                            
+                            <div class="mt-4 text-center">
+                                <button id="new-session-btn" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-redo"></i>
+                                    Start New Session
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // AI Executive Panel Simulator JavaScript
+        class ExecutiveSimulator {
+            constructor() {
+                this.selectedExecutives = [];
+                this.currentExecutive = null;
+                this.init();
+            }
+            
+            init() {
+                this.bindEvents();
+                this.showPhase('setup');
+            }
+            
+            bindEvents() {
+                document.getElementById('setup-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.startSession();
+                });
+                
+                document.getElementById('send-response-btn').addEventListener('click', () => {
+                    this.sendResponse();
+                });
+                
+                document.getElementById('student-response').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendResponse();
+                    }
+                });
+                
+                document.getElementById('end-session-btn').addEventListener('click', () => {
+                    this.endSession();
+                });
+                
+                document.getElementById('new-session-btn').addEventListener('click', () => {
+                    this.newSession();
+                });
+                
+                document.querySelectorAll('.executive-card input[type="checkbox"]').forEach(checkbox => {
+                    checkbox.addEventListener('change', () => {
+                        this.updateSelectedExecutives();
+                    });
+                });
+            }
+            
+            updateSelectedExecutives() {
+                this.selectedExecutives = [];
+                document.querySelectorAll('.executive-card input[type="checkbox"]:checked').forEach(checkbox => {
+                    this.selectedExecutives.push(checkbox.value);
+                });
+            }
+            
+            showPhase(phaseName) {
+                document.querySelectorAll('.phase').forEach(phase => {
+                    phase.classList.remove('active');
+                });
+                document.getElementById(`${phaseName}-phase`).classList.add('active');
+            }
+            
+            async startSession() {
+                if (this.selectedExecutives.length === 0) {
+                    alert('Please select at least one executive for the panel.');
+                    return;
+                }
+                
+                const companyName = document.getElementById('company-name').value;
+                const industry = document.getElementById('industry').value;
+                const presentationTopic = document.getElementById('presentation-topic').value;
+                
+                if (!companyName || !industry || !presentationTopic) {
+                    alert('Please fill in all required fields.');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/setup_session', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            company_name: companyName,
+                            industry: industry,
+                            presentation_topic: presentationTopic,
+                            selected_executives: this.selectedExecutives
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        this.setupSimulationPhase();
+                        this.startPresentation();
+                    } else {
+                        throw new Error(data.error || 'Failed to setup session');
+                    }
+                } catch (error) {
+                    alert('Error starting session: ' + error.message);
+                }
+            }
+            
+            setupSimulationPhase() {
+                const executiveList = document.getElementById('executive-list');
+                executiveList.innerHTML = '';
+                
+                const executives = {
+                    'CEO': { name: 'Sarah Chen', icon: 'fa-crown' },
+                    'CFO': { name: 'Michael Rodriguez', icon: 'fa-chart-line' },
+                    'CTO': { name: 'Dr. Lisa Wang', icon: 'fa-microchip' },
+                    'CMO': { name: 'James Thompson', icon: 'fa-bullhorn' },
+                    'COO': { name: 'Rebecca Johnson', icon: 'fa-cogs' }
+                };
+                
+                this.selectedExecutives.forEach(role => {
+                    const exec = executives[role];
+                    const execElement = document.createElement('div');
+                    execElement.className = 'executive-member';
+                    execElement.innerHTML = `
+                        <div class="avatar avatar-${role}">
+                            <i class="fas ${exec.icon}"></i>
+                        </div>
+                        <div class="info">
+                            <div class="name">${exec.name}</div>
+                            <div class="title">${role}</div>
+                        </div>
+                    `;
+                    executiveList.appendChild(execElement);
+                });
+                
+                this.showPhase('simulation');
+            }
+            
+            async startPresentation() {
+                try {
+                    const response = await fetch('/start_presentation', { method: 'POST' });
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.displayInitialQuestions(data.initial_questions);
+                    } else {
+                        throw new Error(data.error || 'Failed to start presentation');
+                    }
+                } catch (error) {
+                    alert('Error starting presentation: ' + error.message);
+                }
+            }
+            
+            displayInitialQuestions(questions) {
+                const conversationArea = document.getElementById('conversation-area');
+                conversationArea.innerHTML = `
+                    <div class="alert alert-success text-center">
+                        <i class="fas fa-handshake"></i>
+                        <strong>Welcome to your executive presentation!</strong><br>
+                        The panel is ready to hear your proposal.
+                    </div>
+                `;
+                
+                if (questions.length > 0) {
+                    const firstQuestion = questions[0];
+                    this.addExecutiveMessage(firstQuestion);
+                    this.currentExecutive = firstQuestion.executive;
+                    this.showResponseArea(firstQuestion.executive);
+                }
+            }
+            
+            addExecutiveMessage(questionData) {
+                const conversationArea = document.getElementById('conversation-area');
+                const messageElement = document.createElement('div');
+                messageElement.className = 'message executive';
+                
+                const time = new Date(questionData.timestamp).toLocaleTimeString();
+                const icon = this.getExecutiveIcon(questionData.executive);
+                
+                messageElement.innerHTML = `
+                    <div class="message-header">
+                        <div class="executive-avatar avatar-${questionData.executive}">
+                            ${icon}
+                        </div>
+                        <div>
+                            <strong>${questionData.name}</strong>
+                            <small class="text-muted d-block">${questionData.title}</small>
+                        </div>
+                    </div>
+                    <div class="message-bubble">
+                        <p class="mb-0">${questionData.question}</p>
+                        <div class="message-time">${time}</div>
+                    </div>
+                `;
+                
+                conversationArea.appendChild(messageElement);
+                this.scrollToBottom();
+                this.setActiveExecutive(questionData.executive);
+            }
+            
+            addStudentMessage(response) {
+                const conversationArea = document.getElementById('conversation-area');
+                const messageElement = document.createElement('div');
+                messageElement.className = 'message student';
+                
+                const time = new Date().toLocaleTimeString();
+                
+                messageElement.innerHTML = `
+                    <div class="message-header">
+                        <div>
+                            <strong>You</strong>
+                            <small class="text-muted d-block">Student Response</small>
+                        </div>
+                        <div class="student-avatar">
+                            <i class="fas fa-user"></i>
+                        </div>
+                    </div>
+                    <div class="message-bubble">
+                        <p class="mb-0">${response}</p>
+                        <div class="message-time">${time}</div>
+                    </div>
+                `;
+                
+                conversationArea.appendChild(messageElement);
+                this.scrollToBottom();
+            }
+            
+            getExecutiveIcon(role) {
+                const icons = {
+                    'CEO': '<i class="fas fa-crown"></i>',
+                    'CFO': '<i class="fas fa-chart-line"></i>',
+                    'CTO': '<i class="fas fa-microchip"></i>',
+                    'CMO': '<i class="fas fa-bullhorn"></i>',
+                    'COO': '<i class="fas fa-cogs"></i>'
+                };
+                return icons[role] || '<i class="fas fa-user"></i>';
+            }
+            
+            setActiveExecutive(role) {
+                document.querySelectorAll('.executive-member').forEach(member => {
+                    member.classList.remove('active');
+                });
+                
+                document.querySelectorAll('.executive-member').forEach(member => {
+                    const titleElement = member.querySelector('.title');
+                    if (titleElement && titleElement.textContent === role) {
+                        member.classList.add('active');
+                    }
+                });
+            }
+            
+            showResponseArea(executive) {
+                const responseArea = document.getElementById('response-area');
+                responseArea.style.display = 'block';
+                
+                const textarea = document.getElementById('student-response');
+                textarea.placeholder = `Respond to the ${executive}...`;
+                textarea.focus();
+            }
+            
+            hideResponseArea() {
+                document.getElementById('response-area').style.display = 'none';
+            }
+            
+            async sendResponse() {
+                const responseText = document.getElementById('student-response').value.trim();
+                
+                if (!responseText) {
+                    alert('Please enter a response.');
+                    return;
+                }
+                
+                if (!this.currentExecutive) {
+                    alert('No active question to respond to.');
+                    return;
+                }
+                
+                this.addStudentMessage(responseText);
+                document.getElementById('student-response').value = '';
+                this.hideResponseArea();
+                
+                this.showLoadingMessage('Executive is considering your response...');
+                
+                try {
+                    const response = await fetch('/respond_to_executive', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            response: responseText,
+                            executive_role: this.currentExecutive
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.hideLoadingMessage();
+                        
+                        if (data.follow_up) {
+                            setTimeout(() => {
+                                this.addExecutiveMessage(data.follow_up);
+                                this.currentExecutive = data.follow_up.executive;
+                                this.showResponseArea(data.follow_up.executive);
+                            }, 1000);
+                        }
+                    } else {
+                        throw new Error(data.error || 'Failed to get response');
+                    }
+                } catch (error) {
+                    this.hideLoadingMessage();
+                    alert('Error getting executive response: ' + error.message);
+                    this.showResponseArea(this.currentExecutive);
+                }
+            }
+            
+            showLoadingMessage(text) {
+                const conversationArea = document.getElementById('conversation-area');
+                const loadingElement = document.createElement('div');
+                loadingElement.className = 'loading-message';
+                loadingElement.id = 'loading-message';
+                loadingElement.innerHTML = `
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2">${text}</p>
+                `;
+                conversationArea.appendChild(loadingElement);
+                this.scrollToBottom();
+            }
+            
+            hideLoadingMessage() {
+                const loadingMessage = document.getElementById('loading-message');
+                if (loadingMessage) {
+                    loadingMessage.remove();
+                }
+            }
+            
+            async endSession() {
+                if (confirm('Are you sure you want to end this session?')) {
+                    try {
+                        const response = await fetch('/end_session', { method: 'POST' });
+                        const data = await response.json();
+                        
+                        if (data.status === 'success') {
+                            this.showSessionSummary(data.summary);
+                        }
+                    } catch (error) {
+                        alert('Error ending session: ' + error.message);
+                    }
+                }
+            }
+            
+            showSessionSummary(summary) {
+                const summaryContainer = document.getElementById('session-summary');
+                summaryContainer.innerHTML = `
+                    <div class="text-center">
+                        <h4>Session Complete!</h4>
+                        <p>You had ${summary.total_interactions} interactions with the executive panel.</p>
+                        <p>Company: <strong>${summary.company_name}</strong></p>
+                        <p>Topic: <strong>${summary.presentation_topic}</strong></p>
+                        <div class="alert alert-success">
+                            Great job engaging with the executives! This practice will help you prepare for real presentations.
+                        </div>
+                    </div>
+                `;
+                this.showPhase('summary');
+            }
+            
+            newSession() {
+                this.selectedExecutives = [];
+                this.currentExecutive = null;
+                
+                document.getElementById('setup-form').reset();
+                document.querySelectorAll('.executive-card input[type="checkbox"]').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                
+                this.showPhase('setup');
+            }
+            
+            scrollToBottom() {
+                const conversationArea = document.getElementById('conversation-area');
+                conversationArea.scrollTop = conversationArea.scrollHeight;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new ExecutiveSimulator();
+        });
+    </script>
+</body>
+</html>

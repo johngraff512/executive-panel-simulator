@@ -1,0 +1,27 @@
+# Course materials (PDFs, PowerPoints, etc.)
+*.pdf
+*.pptx
+*.docx
+*.xlsx
+
+# Mac system files
+.DS_Store
+
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Environment files
+.env
+
+# Session files
+flask_session/
+
+# Only track these specific files for the web app:
+# app.py
+# requirements.txt
+# Procfile
+# runtime.txt
+# templates/
+# static/
