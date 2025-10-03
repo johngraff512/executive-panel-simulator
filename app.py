@@ -3,17 +3,15 @@ import tempfile
 import random
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, Response
-from flask_session import Session
 import PyPDF2
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-for-development')
-app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 
-Session(app)
+# Remove Flask-Session completely - use built-in Flask sessions
+# No Session() initialization needed!
 
 # Check if OpenAI is available
 try:
