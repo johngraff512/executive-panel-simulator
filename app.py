@@ -7,13 +7,10 @@ import PyPDF2
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Remove Flask-Session completely - use built-in Flask sessions
-# No Session() initialization needed!
-
-# Check if OpenAI is available
+# Check if OpenAI is available (optional)
 try:
     import openai
     openai_available = True
@@ -600,8 +597,7 @@ def download_transcript():
         return jsonify({'status': 'error', 'error': f'Error generating transcript: {str(e)}'})
 
 if __name__ == '__main__':
-    import os
-    port = int(os.environ.get('PORT', 5001))
+    port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
     
     print("🚀 AI Executive Panel Simulator Starting...")
