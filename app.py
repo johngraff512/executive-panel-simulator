@@ -292,11 +292,7 @@ PRESENTATION TRANSCRIPT
 # Routes
 @app.route('/')
 def index():
-    return 'Hello from Railway!'
-
-@app.route('/test')
-def test():
-    return 'test successful'
+    return render_template('index.html')
 
 @app.route('/setup_session', methods=['POST'])
 def setup_session():
