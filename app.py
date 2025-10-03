@@ -292,16 +292,7 @@ PRESENTATION TRANSCRIPT
 # Routes
 @app.route('/')
 def index():
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head><title>Test</title></head>
-    <body>
-        <h1>🎉 Flask App is Working!</h1>
-        <p>If you see this, the app is running correctly.</p>
-    </body>
-    </html>
-    '''
+    return 'Hello from Railway!'
 
 @app.route('/test')
 def test():
