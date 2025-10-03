@@ -296,7 +296,7 @@ def index():
 
 @app.route('/test')
 def test():
-    return {'status': 'working', 'message': 'Flask is running on Railway!'}
+    return 'test successful'
 
 @app.route('/setup_session', methods=['POST'])
 def setup_session():
