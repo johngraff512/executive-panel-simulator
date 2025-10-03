@@ -292,7 +292,20 @@ PRESENTATION TRANSCRIPT
 # Routes
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head><title>Test</title></head>
+    <body>
+        <h1>🎉 Flask App is Working!</h1>
+        <p>If you see this, the app is running correctly.</p>
+    </body>
+    </html>
+    '''
+
+@app.route('/test')
+def test():
+    return {'status': 'working', 'message': 'Flask is running on Railway!'}
 
 @app.route('/setup_session', methods=['POST'])
 def setup_session():
