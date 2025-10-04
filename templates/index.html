@@ -3,13 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Executive Panel Simulator</title>
+    <title>AI Executive Panel Simulator - McCombs School of Business</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        :root {
+            --texas-orange: #BF5700;
+            --texas-orange-light: #E86A00;
+            --texas-orange-dark: #9A4600;
+            --charcoal: #333F48;
+        }
+        
         .phase { display: none; animation: fadeIn 0.5s ease-in; }
         .phase.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        .mccombs-header {
+            background: linear-gradient(135deg, var(--texas-orange), var(--texas-orange-light));
+            color: white;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .mccombs-logo {
+            max-height: 60px;
+            width: auto;
+            margin-right: 1rem;
+        }
+        
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            font-weight: 600;
+            font-size: 1.25rem;
+        }
         
         .executive-grid {
             display: grid;
@@ -27,7 +54,8 @@
         
         .executive-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 12px rgba(191, 87, 0, 0.15);
+            border-color: var(--texas-orange);
         }
         
         .executive-card input[type="checkbox"] { display: none; }
@@ -43,7 +71,7 @@
         }
         
         .executive-card input[type="checkbox"]:checked + label {
-            background: linear-gradient(135deg, #0d6efd, #4dabf7);
+            background: linear-gradient(135deg, var(--texas-orange), var(--texas-orange-light));
             color: white;
             border-radius: 6px;
         }
@@ -105,7 +133,7 @@
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            background: #198754;
+            background: var(--texas-orange);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -131,15 +159,15 @@
         
         .message.executive .message-bubble {
             margin-left: 0;
-            border-left: 4px solid #0d6efd;
+            border-left: 4px solid var(--texas-orange);
         }
         
         .message.student .message-bubble {
             margin-left: auto;
-            background: #198754;
+            background: var(--texas-orange);
             color: white;
             border-left: none;
-            border-right: 4px solid #0d5128;
+            border-right: 4px solid var(--texas-orange-dark);
         }
         
         .message-time {
@@ -169,8 +197,8 @@
         }
         
         .executive-member.active {
-            background: #e3f2fd;
-            border-left-color: #0d6efd;
+            background: #fff3ed;
+            border-left-color: var(--texas-orange);
         }
         
         .executive-member .avatar {
@@ -203,17 +231,95 @@
         }
         
         .sticky-top { position: sticky; top: 20px; }
+        
+        /* Texas Orange themed buttons and form elements */
+        .btn-primary {
+            background-color: var(--texas-orange);
+            border-color: var(--texas-orange);
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--texas-orange-dark);
+            border-color: var(--texas-orange-dark);
+        }
+        
+        .btn-primary:focus {
+            background-color: var(--texas-orange-dark);
+            border-color: var(--texas-orange-dark);
+            box-shadow: 0 0 0 0.2rem rgba(191, 87, 0, 0.25);
+        }
+        
+        .form-control:focus {
+            border-color: var(--texas-orange);
+            box-shadow: 0 0 0 0.2rem rgba(191, 87, 0, 0.25);
+        }
+        
+        .form-select:focus {
+            border-color: var(--texas-orange);
+            box-shadow: 0 0 0 0.2rem rgba(191, 87, 0, 0.25);
+        }
+        
+        .card-header.bg-primary {
+            background: linear-gradient(135deg, var(--texas-orange), var(--texas-orange-light)) !important;
+        }
+        
+        .card-header.bg-info {
+            background: linear-gradient(135deg, var(--texas-orange-light), var(--texas-orange)) !important;
+        }
+        
+        .card-header.bg-success {
+            background: linear-gradient(135deg, var(--texas-orange), var(--texas-orange-dark)) !important;
+        }
+        
+        .card-header.bg-warning {
+            background: linear-gradient(135deg, var(--texas-orange-light), var(--texas-orange)) !important;
+            color: white !important;
+        }
+        
+        .progress-bar {
+            background-color: var(--texas-orange);
+        }
+        
+        .alert-success {
+            background-color: #fff3ed;
+            border-color: var(--texas-orange-light);
+            color: var(--texas-orange-dark);
+        }
+        
+        .btn-info {
+            background-color: var(--texas-orange-light);
+            border-color: var(--texas-orange-light);
+        }
+        
+        .btn-info:hover {
+            background-color: var(--texas-orange);
+            border-color: var(--texas-orange);
+        }
+        
+        /* McCombs branding footer */
+        .mccombs-footer {
+            text-align: center;
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 3rem;
+            padding: 2rem 0;
+            border-top: 1px solid #dee2e6;
+        }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-dark bg-primary mb-4">
+    <div class="mccombs-header">
         <div class="container">
-            <span class="navbar-brand mb-0 h1">
-                <i class="fas fa-users-cog"></i>
-                AI Executive Panel Simulator
-            </span>
+            <div class="navbar-brand mb-0">
+                <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjYwIiB2aWV3Qm94PSIwIDAgMjAwIDYwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8IS0tIFBsYWNlaG9sZGVyIGZvciBNY0NvbWJzIExvZ28gLS0+CjxyZWN0IHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgZmlsbD0id2hpdGUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIvPgo8dGV4dCB4PSIzMCIgeT0iMzUiIGZpbGw9IiNCRjU3MDAiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TUNCczwvdGV4dD4KPHR4dCB4PSI3NSIgeT0iMjUiIGZpbGw9IndoaXRlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZvbnQtd2VpZ2h0PSJib2xkIj5NY0NvbWJzIFNjaG9vbCBvZiBCdXNpbmVzczwvdHh0Pgo8dHh0IHg9Ijc1IiB5PSI0MCIgZmlsbD0id2hpdGUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMCI+VW5pdmVyc2l0eSBvZiBUZXhhcyBhdCBBdXN0aW48L3R4dD4KPHN2Zz4=" 
+                     alt="McCombs School of Business" class="mccombs-logo">
+                <div>
+                    <div>AI Executive Panel Simulator</div>
+                    <small style="font-size: 0.8rem; opacity: 0.9;">McCombs School of Business</small>
+                </div>
+            </div>
         </div>
-    </nav>
+    </div>
 
     <div class="container">
         <!-- Setup Phase -->
@@ -254,19 +360,11 @@
                                     <div class="col-md-6">
                                         <div class="mb-3">
                                             <label for="industry" class="form-label">Industry</label>
-                                            <select class="form-select" id="industry" name="industry" required>
-                                                <option value="">Select Industry</option>
-                                                <option value="Technology">Technology</option>
-                                                <option value="Healthcare">Healthcare</option>
-                                                <option value="Finance">Finance</option>
-                                                <option value="Retail">Retail</option>
-                                                <option value="Manufacturing">Manufacturing</option>
-                                                <option value="Energy">Energy</option>
-                                                <option value="Education">Education</option>
-                                                <option value="Consulting">Consulting</option>
-                                                <option value="Real Estate">Real Estate</option>
-                                                <option value="Other">Other</option>
-                                            </select>
+                                            <input type="text" class="form-control" id="industry" 
+                                                   name="industry" placeholder="e.g., Technology, Healthcare, Finance" required>
+                                            <small class="text-muted">
+                                                Enter the specific industry for your company (will be used to tailor executive questions)
+                                            </small>
                                         </div>
                                     </div>
                                 </div>
@@ -524,6 +622,14 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+        
+        <!-- McCombs Footer -->
+        <div class="mccombs-footer">
+            <div class="container">
+                <p>&copy; 2025 McCombs School of Business, The University of Texas at Austin<br>
+                AI Executive Panel Simulator - Developed for Strategic Management Education</p>
             </div>
         </div>
     </div>
