@@ -4,18 +4,27 @@ import random
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, Response
 import PyPDF2
+import openai
 
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Check if OpenAI is available (optional)
+# Initialize OpenAI client
+openai_client = None
+openai_available = False
+
 try:
-    import openai
-    openai_available = True
-    openai.api_key = os.environ.get('OPENAI_API_KEY')
-except ImportError:
+    api_key = os.environ.get('OPENAI_API_KEY')
+    if api_key:
+        openai_client = openai.OpenAI(api_key=api_key)
+        openai_available = True
+        print("✅ OpenAI API key found - AI-powered questions enabled")
+    else:
+        print("⚠️ No OpenAI API key found - running in demo mode")
+except Exception as e:
+    print(f"❌ OpenAI initialization failed: {e}")
     openai_available = False
 
 # PDF Processing Functions
@@ -37,90 +46,210 @@ def extract_text_from_pdf(pdf_file):
         print(f"Error extracting PDF text: {e}")
         return ""
 
-def analyze_report_themes(report_content):
-    """Extract key themes and topics from the report"""
+def analyze_report_with_ai(report_content, company_name, industry, report_type):
+    """Use OpenAI to analyze report content and extract key themes"""
+    if not openai_available or not openai_client:
+        # Fallback to basic analysis
+        return analyze_report_themes_basic(report_content)
+    
+    try:
+        prompt = f"""
+        Analyze this business report for {company_name} in the {industry} industry.
+        Report type: {report_type}
+        
+        Extract 5-7 key strategic themes, challenges, or opportunities that executives would want to question.
+        Focus on areas that need deeper analysis or clarification.
+        
+        Report content:
+        {report_content[:3000]}...
+        
+        Return only a Python list of themes, like:
+        ["market expansion strategy", "financial projections", "competitive positioning"]
+        """
+        
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a business analyst extracting key themes from reports."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=200,
+            temperature=0.3
+        )
+        
+        # Parse the response to extract themes
+        themes_text = response.choices[0].message.content.strip()
+        
+        # Try to extract list from response
+        import ast
+        try:
+            themes = ast.literal_eval(themes_text)
+            if isinstance(themes, list):
+                return themes[:6]  # Limit to 6 themes
+        except:
+            pass
+            
+        # Fallback: split by lines or commas
+        themes = []
+        for line in themes_text.split('\n'):
+            line = line.strip('- "[]')
+            if line and len(line) > 5:
+                themes.append(line)
+        
+        return themes[:6] if themes else ["your strategic approach"]
+        
+    except Exception as e:
+        print(f"AI analysis failed: {e}")
+        return analyze_report_themes_basic(report_content)
+
+def analyze_report_themes_basic(report_content):
+    """Basic keyword-based theme extraction (fallback)"""
     if not report_content or len(report_content) < 100:
         return ["your main proposal"]
     
-    # Simple keyword-based theme extraction
     themes = []
-    
-    # Common business themes to look for
     theme_keywords = {
         'digital transformation': ['digital', 'technology', 'automation', 'AI'],
         'market expansion': ['expand', 'growth', 'market', 'international'],
         'cost reduction': ['cost', 'efficiency', 'savings', 'optimize'],
         'new product launch': ['product', 'launch', 'innovation', 'development'],
         'customer experience': ['customer', 'experience', 'satisfaction', 'service'],
-        'sustainability': ['sustainable', 'green', 'environment', 'ESG']
+        'sustainability': ['sustainable', 'green', 'environment', 'ESG'],
+        'financial strategy': ['revenue', 'profit', 'investment', 'funding'],
+        'competitive strategy': ['competition', 'competitor', 'market share', 'differentiation']
     }
     
     content_lower = report_content.lower()
-    
     for theme, keywords in theme_keywords.items():
         if any(keyword in content_lower for keyword in keywords):
             themes.append(theme)
     
-    return themes[:3] if themes else ["your main strategy"]
+    return themes[:5] if themes else ["your strategic approach"]
 
-def generate_contextual_questions(report_content, executive_role, company_name, industry, report_type):
-    """Generate questions based on actual report content"""
+def generate_ai_questions(report_content, executive_role, company_name, industry, report_type, key_themes):
+    """Generate AI-powered questions based on report analysis"""
     
-    # Extract key themes from the report
-    key_themes = analyze_report_themes(report_content)
+    if not openai_available or not openai_client:
+        # Fallback to template-based questions
+        return generate_template_questions(executive_role, company_name, industry, report_type, key_themes)
     
-    # Role-specific question templates based on content
+    try:
+        # Create role-specific context
+        role_contexts = {
+            'CEO': 'strategic vision, market positioning, competitive advantage, long-term growth, stakeholder value',
+            'CFO': 'financial performance, cash flow, profitability, investment returns, financial risks, capital allocation',
+            'CTO': 'technology architecture, scalability, technical risks, innovation, development timeline, data security',
+            'CMO': 'market positioning, customer acquisition, brand strategy, marketing ROI, customer retention',
+            'COO': 'operational efficiency, process optimization, supply chain, quality control, execution capabilities'
+        }
+        
+        role_context = role_contexts.get(executive_role, 'business strategy and operations')
+        themes_str = ', '.join(key_themes[:4])
+        
+        prompt = f"""
+        You are a senior {executive_role} reviewing a {report_type} for {company_name} in the {industry} industry.
+        
+        Key themes identified: {themes_str}
+        
+        As a {executive_role}, generate 7 challenging but fair questions that focus on {role_context}.
+        Questions should:
+        - Be specific to the {industry} industry
+        - Reference the key themes when relevant
+        - Challenge assumptions and require detailed responses
+        - Be appropriate for a {executive_role} to ask
+        - Include follow-up probes for deeper analysis
+        
+        Report excerpt:
+        {report_content[:2000]}...
+        
+        Return exactly 7 questions as a numbered list:
+        """
+        
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": f"You are an experienced {executive_role} asking strategic questions about business presentations."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=800,
+            temperature=0.7
+        )
+        
+        questions_text = response.choices[0].message.content.strip()
+        
+        # Parse questions from response
+        questions = []
+        for line in questions_text.split('\n'):
+            line = line.strip()
+            if line and (line[0].isdigit() or line.startswith('-') or line.startswith('•')):
+                # Remove numbering and clean up
+                question = line.split('.', 1)[-1].strip()
+                question = question.split(')', 1)[-1].strip()
+                question = question.lstrip('- •').strip()
+                if len(question) > 20:  # Valid question
+                    questions.append(question)
+        
+        return questions[:7] if questions else generate_template_questions(executive_role, company_name, industry, report_type, key_themes)
+        
+    except Exception as e:
+        print(f"AI question generation failed for {executive_role}: {e}")
+        return generate_template_questions(executive_role, company_name, industry, report_type, key_themes)
+
+def generate_template_questions(executive_role, company_name, industry, report_type, key_themes):
+    """Generate template-based questions (fallback)"""
+    
+    theme = key_themes[0] if key_themes else "your strategy"
+    
     role_templates = {
         'CEO': [
-            f"I've reviewed your {report_type.lower()} for {company_name}. What's the biggest strategic risk you haven't addressed?",
-            f"Your vision for {company_name} is interesting, but how does it differentiate from competitors in {industry}?",
-            f"I notice you mention {key_themes[0]}. How do you plan to execute this at scale?",
-            f"What would you do if your main assumption about {industry} market conditions proves wrong?",
-            f"How does this strategy align with broader {industry} industry trends?",
-            f"Looking at your {report_type.lower()}, what's your biggest competitive advantage?",
-            f"If you had to pivot this strategy in 6 months, what would trigger that decision?"
+            f"Looking at your {report_type.lower()} for {company_name}, what's the biggest strategic risk in the {industry} sector that you haven't addressed?",
+            f"Your approach to {theme} is interesting, but how does it differentiate {company_name} from established players in {industry}?",
+            f"If the {industry} market conditions change significantly, what's your pivot strategy?",
+            f"How do you plan to scale {theme} while maintaining competitive advantage in {industry}?",
+            f"What would trigger you to completely rethink your {industry} strategy?",
+            f"Looking at {company_name}'s position, what's your sustainable competitive moat?",
+            f"How does this {report_type.lower()} align with broader {industry} industry trends?"
         ],
         'CFO': [
-            f"Looking at your financial projections for {company_name}, what's driving your revenue assumptions?",
-            f"I'm concerned about your cash flow timeline. How will you bridge funding gaps?",
-            f"Your cost structure seems optimistic for the {industry} sector. Can you justify these numbers?",
-            f"What's your plan if you need 50% more capital than projected?",
-            f"How did you validate your market size assumptions for {industry}?",
-            f"What are your key financial metrics, and what targets are you setting?",
-            f"How will you manage working capital as {company_name} scales?"
+            f"Your financial projections for {company_name} seem aggressive for the {industry} sector - what's driving these assumptions?",
+            f"I'm concerned about cash flow in your {theme} initiative. How will you fund this without diluting equity?",
+            f"Your cost structure appears optimistic for {industry}. What if operating costs increase by 30%?",
+            f"How did you validate the revenue assumptions for {company_name} in the {industry} market?",
+            f"What's your plan if {company_name} needs 50% more capital than projected?",
+            f"How will you measure ROI on your {theme} investments?",
+            f"What financial metrics will determine success or failure of this {industry} strategy?"
         ],
         'CTO': [
-            f"Your technology approach for {company_name} raises some questions. How scalable is this solution?",
-            f"What's your biggest technical risk, and how are you mitigating it?",
-            f"I don't see much about your technical team. Who's going to build this?",
-            f"How does your technology stack compare to industry standards in {industry}?",
-            f"What happens if your key technical assumptions prove incorrect?",
-            f"How will you handle data security and privacy for {company_name}?",
-            f"What's your technology roadmap for the next 18 months?"
+            f"Your technology approach for {company_name} raises scalability concerns. How will this work at enterprise scale in {industry}?",
+            f"What's your biggest technical risk in implementing {theme}, and how are you mitigating it?",
+            f"The {industry} sector has specific compliance requirements - how does your tech stack address these?",
+            f"What happens if your core technical assumptions about {theme} prove incorrect?",
+            f"How does {company_name}'s technology compare to industry standards in {industry}?",
+            f"What's your technical debt strategy as you scale this {industry} solution?",
+            f"How will you handle data security and privacy in the {industry} context?"
         ],
         'CMO': [
-            f"Your customer acquisition strategy for {company_name} seems ambitious. How will you reach these customers?",
-            f"I'm not seeing strong differentiation in your value proposition. What makes you unique in {industry}?",
+            f"Your customer acquisition strategy for {company_name} in {industry} seems ambitious - how will you actually reach these customers?",
+            f"I don't see strong differentiation in your {theme} value proposition. What makes you unique in {industry}?",
             f"Your marketing budget assumptions - are these based on actual {industry} benchmarks?",
-            f"How do you plan to compete against established players in {industry}?",
-            f"What's your customer retention strategy beyond initial acquisition?",
-            f"How will you measure marketing ROI for {company_name}?",
-            f"What customer feedback have you gotten on your {industry} approach?"
+            f"How do you plan to compete against established brands in the {industry} market?",
+            f"What's your customer retention strategy beyond initial acquisition in {industry}?",
+            f"How will you measure marketing ROI for {company_name}'s {theme} initiative?",
+            f"What customer feedback have you gathered about your {industry} approach?"
         ],
         'COO': [
-            f"The operational plan for {company_name} looks complex. What's your biggest execution risk?",
+            f"The operational plan for {company_name}'s {theme} looks complex - what's your biggest execution risk?",
             f"How will you scale operations while maintaining quality in the {industry} sector?",
-            f"I'm concerned about your timeline. What if key milestones are delayed?",
-            f"Your supply chain assumptions - how have you validated these for {industry}?",
-            f"What operational metrics will you track, and what are your targets?",
-            f"How will you manage quality control as {company_name} grows?",
+            f"Your timeline seems aggressive - what if key milestones are delayed in this {industry} rollout?",
+            f"How have you validated your supply chain assumptions for the {industry} market?",
+            f"What operational metrics will you track, and what are your targets for {theme}?",
+            f"How will you manage quality control as {company_name} grows in {industry}?",
             f"What's your contingency plan if operations don't scale as expected?"
         ]
     }
     
-    # Select and randomize questions based on report content
     questions = role_templates.get(executive_role, [])
-    return questions
+    return questions[:7] if questions else [f"Can you elaborate on your {theme} approach for {company_name}?"]
 
 def get_executive_name(role):
     """Get executive name by role"""
@@ -136,7 +265,6 @@ def get_executive_name(role):
 def get_next_executive(selected_executives, conversation_history):
     """Determine which executive should ask the next question"""
     
-    # Count questions asked by each executive
     exec_question_count = {}
     for exec_role in selected_executives:
         exec_question_count[exec_role] = len([
@@ -144,24 +272,19 @@ def get_next_executive(selected_executives, conversation_history):
             if msg.get('type') == 'question' and msg.get('executive') == exec_role
         ])
     
-    # Always start with CEO
     if not conversation_history:
         return 'CEO' if 'CEO' in selected_executives else selected_executives[0]
     
-    # Find executive who has asked fewest questions
     min_questions = min(exec_question_count.values())
     candidates = [exec for exec, count in exec_question_count.items() if count == min_questions]
     
-    # If multiple candidates, rotate through them
     if len(candidates) > 1:
-        # Get last executive who asked a question
         last_exec = None
         for msg in reversed(conversation_history):
             if msg.get('type') == 'question':
                 last_exec = msg.get('executive')
                 break
         
-        # Find next executive in rotation
         if last_exec in candidates:
             try:
                 current_index = candidates.index(last_exec)
@@ -184,7 +307,7 @@ def check_session_limit(session_data):
         return question_count >= question_limit
     
     elif session_type == 'time' and session_start:
-        time_limit = int(session_data.get('time_limit', 10))  # minutes
+        time_limit = int(session_data.get('time_limit', 10))
         start_time = datetime.fromisoformat(session_start)
         elapsed = datetime.now() - start_time
         return elapsed.total_seconds() >= (time_limit * 60)
@@ -194,9 +317,9 @@ def check_session_limit(session_data):
 def generate_closing_message(company_name, report_type):
     """Generate a professional closing message from the CEO"""
     closing_messages = [
-        f"Thank you for presenting your {report_type.lower()} for {company_name}. You've given our executive team some excellent insights and ideas to consider. Your strategic thinking is impressive, and we appreciate the thorough analysis you've provided.",
-        f"This has been a very productive discussion about {company_name}. Your {report_type.lower()} demonstrates solid strategic planning, and the executive team has gained valuable perspectives from your presentation. We'll be discussing these ideas further in our upcoming strategic planning sessions.",
-        f"Excellent work on your {report_type.lower()} for {company_name}. You've addressed our key concerns and provided thoughtful responses to our questions. The executive team is impressed with your analysis and will be incorporating several of your insights into our strategic discussions."
+        f"Thank you for presenting your {report_type.lower()} for {company_name}. You've given our executive team excellent insights to consider. Your strategic thinking is impressive, and we appreciate the thorough analysis.",
+        f"This has been a productive discussion about {company_name}. Your {report_type.lower()} demonstrates solid strategic planning, and the team has gained valuable perspectives from your presentation.",
+        f"Excellent work on your {report_type.lower()} for {company_name}. You've addressed our key concerns with thoughtful responses. The executive team will incorporate several of your insights into our strategic discussions."
     ]
     return random.choice(closing_messages)
 
@@ -209,15 +332,16 @@ def generate_transcript(session_data):
     selected_executives = session_data.get('selected_executives', [])
     session_start = session_data.get('session_start_time', '')
     
-    # Format session start time
     if session_start:
         start_time = datetime.fromisoformat(session_start)
         session_date = start_time.strftime("%B %d, %Y at %I:%M %p")
     else:
         session_date = "Date not recorded"
     
+    ai_mode = "AI-Powered" if openai_available else "Demo Mode"
+    
     transcript = f"""
-AI EXECUTIVE PANEL SIMULATOR
+AI EXECUTIVE PANEL SIMULATOR - {ai_mode}
 SESSION TRANSCRIPT
 ====================================
 
@@ -226,6 +350,7 @@ Industry: {industry}
 Report Type: {report_type}
 Session Date: {session_date}
 Executives Present: {', '.join(selected_executives)}
+AI Enhancement: {'Enabled' if openai_available else 'Template-based'}
 
 ====================================
 PRESENTATION TRANSCRIPT
@@ -283,21 +408,22 @@ PRESENTATION TRANSCRIPT
     transcript += "====================================\n"
     transcript += "END OF TRANSCRIPT\n"
     transcript += "====================================\n"
-    transcript += f"Generated by AI Executive Panel Simulator\n"
+    transcript += f"Generated by AI Executive Panel Simulator ({ai_mode})\n"
     transcript += f"Total Questions Asked: {question_number - 1}\n"
     transcript += f"Executives Participated: {len(selected_executives)}\n"
+    if openai_available:
+        transcript += f"AI Enhancement: OpenAI GPT-4o-mini\n"
     
     return transcript
 
 # Routes
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', ai_enabled=openai_available)
 
 @app.route('/setup_session', methods=['POST'])
 def setup_session():
     try:
-        # Handle file upload
         if 'report-pdf' not in request.files:
             return jsonify({'status': 'error', 'error': 'No PDF file uploaded'})
         
@@ -305,7 +431,6 @@ def setup_session():
         if file.filename == '':
             return jsonify({'status': 'error', 'error': 'No file selected'})
         
-        # Extract form data
         company_name = request.form.get('company-name', '')
         industry = request.form.get('industry', '')
         report_type = request.form.get('report-type', 'Business Plan')
@@ -317,18 +442,20 @@ def setup_session():
         if not all([company_name, industry, selected_executives]):
             return jsonify({'status': 'error', 'error': 'Missing required form data'})
         
-        # Process PDF
         report_content = extract_text_from_pdf(file)
         
         if not report_content:
             return jsonify({'status': 'error', 'error': 'Could not extract text from PDF. Please ensure it\'s a text-based PDF.'})
         
-        # Store session data
+        # AI-powered analysis
+        key_themes = analyze_report_with_ai(report_content, company_name, industry, report_type)
+        
         session['company_name'] = company_name
         session['industry'] = industry
         session['report_type'] = report_type
         session['selected_executives'] = selected_executives
-        session['report_content'] = report_content[:5000]  # Store first 5000 chars
+        session['report_content'] = report_content[:5000]
+        session['key_themes'] = key_themes
         session['conversation_history'] = []
         session['session_type'] = session_type
         session['question_limit'] = question_limit
@@ -338,8 +465,10 @@ def setup_session():
         
         return jsonify({
             'status': 'success',
-            'message': f'Report analyzed successfully! Found {len(report_content)} characters of content.',
-            'executives': selected_executives
+            'message': f'Report analyzed successfully! Found {len(report_content)} characters of content. {"AI-powered" if openai_available else "Template-based"} questions generated.',
+            'executives': selected_executives,
+            'ai_enabled': openai_available,
+            'key_themes': key_themes[:3]
         })
         
     except Exception as e:
@@ -352,33 +481,31 @@ def start_presentation():
         if 'report_content' not in session:
             return jsonify({'status': 'error', 'error': 'No report uploaded. Please start over.'})
         
-        # Get session data
         selected_executives = session.get('selected_executives', [])
         company_name = session.get('company_name', '')
         industry = session.get('industry', '')
         report_type = session.get('report_type', '')
         report_content = session.get('report_content', '')
+        key_themes = session.get('key_themes', [])
         conversation_history = session.get('conversation_history', [])
         
         if not selected_executives:
             return jsonify({'status': 'error', 'error': 'No executives selected'})
         
-        # Generate questions for all executives
+        # Generate AI-powered questions for all executives
         all_questions = {}
         for exec_role in selected_executives:
-            questions = generate_contextual_questions(
-                report_content, exec_role, company_name, industry, report_type
+            questions = generate_ai_questions(
+                report_content, exec_role, company_name, industry, report_type, key_themes
             )
             all_questions[exec_role] = questions
         
         session['generated_questions'] = all_questions
         
-        # Get first executive (always CEO if available)
         first_exec = get_next_executive(selected_executives, conversation_history)
         first_questions = all_questions.get(first_exec, [])
         
         if first_questions:
-            # Create first question
             question_data = {
                 'executive': first_exec,
                 'name': get_executive_name(first_exec),
@@ -387,14 +514,12 @@ def start_presentation():
                 'timestamp': datetime.now().isoformat()
             }
             
-            # Track question usage
             used_questions = session.get('used_questions', {})
             if first_exec not in used_questions:
                 used_questions[first_exec] = []
-            used_questions[first_exec].append(0)  # Track question index
+            used_questions[first_exec].append(0)
             session['used_questions'] = used_questions
             
-            # Add to conversation history
             conversation_history.append({
                 'type': 'question',
                 'executive': first_exec,
@@ -405,7 +530,8 @@ def start_presentation():
             
             return jsonify({
                 'status': 'success',
-                'initial_questions': [question_data]
+                'initial_questions': [question_data],
+                'ai_enabled': openai_available
             })
         
         return jsonify({'status': 'error', 'error': 'No questions generated'})
@@ -424,20 +550,17 @@ def respond_to_executive():
         if not student_response or not current_executive:
             return jsonify({'status': 'error', 'error': 'Missing response or executive role'})
         
-        # Get session data
         selected_executives = session.get('selected_executives', [])
         conversation_history = session.get('conversation_history', [])
         generated_questions = session.get('generated_questions', {})
         used_questions = session.get('used_questions', {})
         
-        # Add student response to history
         conversation_history.append({
             'type': 'response',
             'student_response': student_response,
             'timestamp': datetime.now().isoformat()
         })
         
-        # Check if session should end
         session_data = {
             'session_type': session.get('session_type', 'questions'),
             'question_limit': session.get('question_limit', '10'),
@@ -447,7 +570,6 @@ def respond_to_executive():
         }
         
         if check_session_limit(session_data):
-            # End session with CEO closing
             company_name = session.get('company_name', 'Your Company')
             report_type = session.get('report_type', 'presentation')
             closing_message = generate_closing_message(company_name, report_type)
@@ -476,12 +598,10 @@ def respond_to_executive():
                 'session_ending': True
             })
         
-        # Get next executive
         next_executive = get_next_executive(selected_executives, conversation_history)
         next_questions = generated_questions.get(next_executive, [])
         exec_used_questions = used_questions.get(next_executive, [])
         
-        # Find an unused question
         available_questions = [
             (i, q) for i, q in enumerate(next_questions) 
             if i not in exec_used_questions
@@ -489,24 +609,19 @@ def respond_to_executive():
         
         if available_questions:
             question_index, next_question = random.choice(available_questions)
-            
-            # Track usage
             exec_used_questions.append(question_index)
             used_questions[next_executive] = exec_used_questions
             session['used_questions'] = used_questions
-            
         else:
-            # Generate a generic follow-up if we've run out of questions
             follow_ups = [
-                f"That's interesting. Can you provide a specific example?",
-                f"How would you measure success for that approach?",
-                f"What would you do if that strategy doesn't work as expected?",
-                f"Can you walk us through the implementation timeline?",
-                f"What resources would you need to execute that plan?"
+                "That's interesting. Can you provide a specific example?",
+                "How would you measure success for that approach?",
+                "What would you do if that strategy doesn't work as expected?",
+                "Can you walk us through the implementation timeline?",
+                "What resources would you need to execute that plan?"
             ]
             next_question = random.choice(follow_ups)
         
-        # Create follow-up question
         follow_up = {
             'executive': next_executive,
             'name': get_executive_name(next_executive),
@@ -515,7 +630,6 @@ def respond_to_executive():
             'timestamp': datetime.now().isoformat()
         }
         
-        # Add to conversation history
         conversation_history.append({
             'type': 'question',
             'executive': next_executive,
@@ -542,7 +656,6 @@ def end_session():
         report_type = session.get('report_type', 'presentation')
         session_type = session.get('session_type', 'questions')
         
-        # Count questions and responses
         questions_asked = len([msg for msg in conversation_history if msg.get('type') == 'question'])
         responses_given = len([msg for msg in conversation_history if msg.get('type') == 'response'])
         
@@ -553,7 +666,8 @@ def end_session():
             'presentation_topic': report_type,
             'executives_involved': session.get('selected_executives', []),
             'session_type': session_type,
-            'session_limit': session.get('question_limit' if session_type == 'questions' else 'time_limit', 'Not set')
+            'session_limit': session.get('question_limit' if session_type == 'questions' else 'time_limit', 'Not set'),
+            'ai_enabled': openai_available
         }
         
         return jsonify({
@@ -568,26 +682,21 @@ def end_session():
 @app.route('/download_transcript', methods=['GET'])
 def download_transcript():
     try:
-        # Generate transcript from session data
         transcript_content = generate_transcript(session)
         
-        # Get session info for filename
         company_name = session.get('company_name', 'Company')
         session_date = datetime.now().strftime("%Y%m%d_%H%M")
         
-        # Clean company name for filename
         safe_company_name = "".join(c for c in company_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
         safe_company_name = safe_company_name.replace(' ', '_')
         
-        filename = f"{safe_company_name}_Executive_Panel_Transcript_{session_date}.txt"
+        ai_suffix = "_AI" if openai_available else "_Demo"
+        filename = f"{safe_company_name}_Executive_Panel_Transcript{ai_suffix}_{session_date}.txt"
         
-        # Return file as download
         response = Response(
             transcript_content,
             mimetype='text/plain',
-            headers={
-                'Content-Disposition': f'attachment; filename="{filename}"'
-            }
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
         )
         
         return response
@@ -596,13 +705,26 @@ def download_transcript():
         print(f"Download transcript error: {e}")
         return jsonify({'status': 'error', 'error': f'Error generating transcript: {str(e)}'})
 
+# Logo serving route (if logo is in root directory)
+@app.route('/mccombs-logo.jpg')
+def serve_logo():
+    """Serve the McCombs logo from the root directory"""
+    try:
+        from flask import send_file
+        import os
+        logo_path = os.path.join(os.getcwd(), 'mccombs-logo.jpg')
+        return send_file(logo_path, mimetype='image/jpeg')
+    except Exception as e:
+        print(f"Error serving logo: {e}")
+        return "Logo not found", 404
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
     
     print("🚀 AI Executive Panel Simulator Starting...")
     print(f"📁 Current directory: {os.getcwd()}")
-    print(f"🔧 Demo mode: {not openai_available}")
+    print(f"🤖 AI Enhancement: {'Enabled' if openai_available else 'Disabled (Demo Mode)'}")
     print(f"🌐 Running on port: {port}")
     print("="*50)
     
