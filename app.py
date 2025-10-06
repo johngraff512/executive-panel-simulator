@@ -10,7 +10,8 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Initialize OpenAI client with proper error handling
+
+# Initialize OpenAI client with bulletproof error handling
 openai_client = None
 openai_available = False
 
@@ -18,17 +19,39 @@ try:
     import openai
     api_key = os.environ.get('OPENAI_API_KEY')
     if api_key:
-        # Use simple initialization without any extra parameters
-        openai_client = openai.OpenAI(api_key=api_key)
-        openai_available = True
-        print("✅ OpenAI API key found - AI-powered questions enabled")
+        # Try multiple initialization methods for compatibility
+        try:
+            # Method 1: Simple initialization (preferred)
+            openai_client = openai.OpenAI(api_key=api_key)
+            openai_available = True
+            print("✅ OpenAI API key found - AI-powered questions enabled")
+        except TypeError as e:
+            if 'proxies' in str(e):
+                # Method 2: Force latest client format
+                try:
+                    openai_client = openai.OpenAI(
+                        api_key=api_key,
+                        timeout=30.0,
+                        max_retries=3
+                    )
+                    openai_available = True
+                    print("✅ OpenAI API key found - AI-powered questions enabled (fallback method)")
+                except Exception as e2:
+                    print(f"❌ OpenAI fallback initialization failed: {e2}")
+                    openai_available = False
+            else:
+                print(f"❌ OpenAI initialization failed with TypeError: {e}")
+                openai_available = False
+        except Exception as e:
+            print(f"❌ OpenAI initialization failed: {e}")
+            openai_available = False
     else:
         print("⚠️ No OpenAI API key found - running in demo mode")
 except ImportError as e:
     print(f"❌ OpenAI library not available: {e}")
     openai_available = False
 except Exception as e:
-    print(f"❌ OpenAI initialization failed: {e}")
+    print(f"❌ Unexpected error during OpenAI import: {e}")
     openai_available = False
 
 # PDF Processing Functions
