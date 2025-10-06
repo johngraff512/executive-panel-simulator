@@ -207,47 +207,47 @@ def generate_template_questions(executive_role, company_name, industry, report_t
     role_templates = {
         'CEO': [
             f"Looking at your {report_type.lower()} for {company_name}, what's the biggest strategic risk in the {industry} sector that you haven't addressed?",
-            f"Your approach to {theme} is interesting, but how does it differentiate {company_name} from established players in {industry}?",
-            f"If the {industry} market conditions change significantly, what's your pivot strategy?",
-            f"How do you plan to scale {theme} while maintaining competitive advantage in {industry}?",
-            f"What would trigger you to completely rethink your {industry} strategy?",
-            f"Looking at {company_name}'s position, what's your sustainable competitive moat?",
+            f"Your approach to {theme} is interesting, but how does it differentiate {company_name} from established players in {industry} industry?",
+            f"If the {industry} industry market conditions change significantly, what's your pivot strategy?",
+            f"How do you plan to scale {theme} while maintaining competitive advantage in {industry} industry?",
+            f"What would trigger you to completely rethink your strategy for {company_name}?",
+            f"Looking at {company_name}'s position, what do you think is our sustainable competitive moat?",
             f"How does this {report_type.lower()} align with broader {industry} industry trends?"
         ],
         'CFO': [
-            f"Your financial projections for {company_name} seem aggressive for the {industry} sector - what's driving these assumptions?",
-            f"I'm concerned about cash flow in your {theme} initiative. How will you fund this without diluting equity?",
-            f"Your cost structure appears optimistic for {industry}. What if operating costs increase by 30%?",
+            f"Your financial projections for {company_name} seem aggressive for the {industry} industry - what's driving these assumptions?",
+            f"I'm concerned about cash flow for your proposed initiatives. How will you fund this?",
+            f"Your cost structure appears optimistic for {industry} industry. What if operating costs increase by 30%?",
             f"How did you validate the revenue assumptions for {company_name} in the {industry} market?",
-            f"What's your plan if {company_name} needs 50% more capital than projected?",
+            f"What's your plan if {company_name} needs 20% more capital than projected?",
             f"How will you measure ROI on your {theme} investments?",
-            f"What financial metrics will determine success or failure of this {industry} strategy?"
+            f"What financial metrics will determine success or failure of your proposed strategy?"
         ],
         'CTO': [
-            f"Your technology approach for {company_name} raises scalability concerns. How will this work at enterprise scale in {industry}?",
+            f"Your technology approach for {company_name} raises scalability concerns. How will this work at enterprise scale?",
             f"What's your biggest technical risk in implementing {theme}, and how are you mitigating it?",
-            f"The {industry} sector has specific compliance requirements - how does your tech stack address these?",
+            f"The {industry} sector has specific compliance requirements - how does your tech plan address these?",
             f"What happens if your core technical assumptions about {theme} prove incorrect?",
-            f"How does {company_name}'s technology compare to industry standards in {industry}?",
+            f"How does {company_name}'s technology compare to industry standards in the {industry} industry?",
             f"What's your technical debt strategy as you scale this {industry} solution?",
             f"How will you handle data security and privacy in the {industry} context?"
         ],
         'CMO': [
-            f"Your customer acquisition strategy for {company_name} in {industry} seems ambitious - how will you actually reach these customers?",
-            f"I don't see strong differentiation in your {theme} value proposition. What makes you unique in {industry}?",
-            f"Your marketing budget assumptions - are these based on actual {industry} benchmarks?",
+            f"Your customer acquisition strategy for {company_name} seems ambitious - how will you actually reach these customers?",
+            f"I don't see strong differentiation in your {theme} value proposition. What makes you your proposed initiatives stand out vs {industry} competition?",
+            f"Your marketing budget assumptions - are these based on actual {industry} industry benchmarks?",
             f"How do you plan to compete against established brands in the {industry} market?",
-            f"What's your customer retention strategy beyond initial acquisition in {industry}?",
+            f"What's your customer retention strategy beyond initial acquisition for {company_name}?",
             f"How will you measure marketing ROI for {company_name}'s {theme} initiative?",
-            f"What customer feedback have you gathered about your {industry} approach?"
+            f"What customer feedback have you gathered about your {theme} approach?"
         ],
         'COO': [
-            f"The operational plan for {company_name}'s {theme} looks complex - what's your biggest execution risk?",
-            f"How will you scale operations while maintaining quality in the {industry} sector?",
-            f"Your timeline seems aggressive - what if key milestones are delayed in this {industry} rollout?",
+            f"The operational plan for {company_name}'s {theme} seems complex - what's your biggest execution risk?",
+            f"How will you scale operations while maintaining quality in the {industry} industry?",
+            f"Your timeline seems aggressive - what if key milestones are delayed in your rollout?",
             f"How have you validated your supply chain assumptions for the {industry} market?",
             f"What operational metrics will you track, and what are your targets for {theme}?",
-            f"How will you manage quality control as {company_name} grows in {industry}?",
+            f"How will you manage quality control as {company_name} grows?",
             f"What's your contingency plan if operations don't scale as expected?"
         ]
     }
