@@ -11,7 +11,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 
-# Initialize OpenAI client with bulletproof error handling
+# Initialize OpenAI client (legacy version)
 openai_client = None
 openai_available = False
 
@@ -19,39 +19,16 @@ try:
     import openai
     api_key = os.environ.get('OPENAI_API_KEY')
     if api_key:
-        # Try multiple initialization methods for compatibility
-        try:
-            # Method 1: Simple initialization (preferred)
-            openai_client = openai.OpenAI(api_key=api_key)
-            openai_available = True
-            print("✅ OpenAI API key found - AI-powered questions enabled")
-        except TypeError as e:
-            if 'proxies' in str(e):
-                # Method 2: Force latest client format
-                try:
-                    openai_client = openai.OpenAI(
-                        api_key=api_key,
-                        timeout=30.0,
-                        max_retries=3
-                    )
-                    openai_available = True
-                    print("✅ OpenAI API key found - AI-powered questions enabled (fallback method)")
-                except Exception as e2:
-                    print(f"❌ OpenAI fallback initialization failed: {e2}")
-                    openai_available = False
-            else:
-                print(f"❌ OpenAI initialization failed with TypeError: {e}")
-                openai_available = False
-        except Exception as e:
-            print(f"❌ OpenAI initialization failed: {e}")
-            openai_available = False
+        openai.api_key = api_key
+        openai_available = True
+        print("✅ OpenAI API key found - AI-powered questions enabled")
     else:
         print("⚠️ No OpenAI API key found - running in demo mode")
 except ImportError as e:
     print(f"❌ OpenAI library not available: {e}")
     openai_available = False
 except Exception as e:
-    print(f"❌ Unexpected error during OpenAI import: {e}")
+    print(f"❌ OpenAI initialization failed: {e}")
     openai_available = False
 
 # PDF Processing Functions
@@ -94,7 +71,7 @@ def analyze_report_with_ai(report_content, company_name, industry, report_type):
         ["market expansion strategy", "financial projections", "competitive positioning"]
         """
         
-        response = openai_client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a business analyst extracting key themes from reports."},
@@ -105,7 +82,7 @@ def analyze_report_with_ai(report_content, company_name, industry, report_type):
         )
         
         # Parse the response to extract themes
-        themes_text = response.choices[0].message.content.strip()
+        themes_text = response['choices'][0]['message']['content'].strip()
         
         # Try to extract list from response
         import ast
@@ -192,7 +169,7 @@ def generate_ai_questions(report_content, executive_role, company_name, industry
         Return exactly 7 questions as a numbered list:
         """
         
-        response = openai_client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": f"You are an experienced {executive_role} asking strategic questions about business presentations."},
@@ -202,7 +179,7 @@ def generate_ai_questions(report_content, executive_role, company_name, industry
             temperature=0.7
         )
         
-        questions_text = response.choices[0].message.content.strip()
+        questions_text = response['choices'][0]['message']['content'].strip()
         
         # Parse questions from response
         questions = []

@@ -3,6 +3,6 @@ gunicorn==21.2.0
 python-dotenv==1.0.0
 PyPDF2==3.0.1
 werkzeug==2.3.7
-openai==1.51.0
+openai==1.12.0
 
 # Updated for OpenAI compatibility - force rebuild
