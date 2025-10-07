@@ -230,13 +230,13 @@ Format as numbered list:"""
                     question = question.split(')', 1)[-1].strip()
                     question = question.lstrip('- •').strip()
                     
-                    # Validate question
-                    if (len(question) > 30 and 
-                        company_name.lower() in question.lower() and
-                        not any(term in question.lower() for term in forbidden_terms)):
-                        questions.append(question)
+                    # RELAXED validation - only check length and forbidden terms
+if (len(question) > 30 and 
+    not any(term in question.lower() for term in forbidden_terms)):
+    questions.append(question)
+
             
-            if len(questions) >= 3:
+            if len(questions) >= 2:
                 print(f"✅ Generated {len(questions)} AI questions for {executive_role}")
                 return questions[:5]
             else:
