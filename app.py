@@ -12,7 +12,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Initialize OpenAI client (legacy version)
+# Initialize OpenAI client (modern version)
 openai_client = None
 openai_available = False
 
@@ -81,7 +81,9 @@ def analyze_report_with_ai_enhanced(report_content, company_name, industry, repo
         }}
         """
         
-        response = openai.ChatCompletion.create(
+        # FIXED: Use new OpenAI API format
+        client = openai.OpenAI(api_key=openai.api_key)
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a senior executive analyst who extracts specific, actionable details from business reports."},
@@ -91,7 +93,7 @@ def analyze_report_with_ai_enhanced(report_content, company_name, industry, repo
             temperature=0.2
         )
         
-        analysis_text = response['choices'][0]['message']['content'].strip()
+        analysis_text = response.choices[0].message.content.strip()
         
         # Try to parse JSON response
         try:
@@ -143,7 +145,7 @@ def analyze_report_themes_basic(report_content):
     return {"key_details": themes[:5] if themes else ["your strategic approach"], "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
 
 def generate_ai_questions_enhanced(report_content, executive_role, company_name, industry, report_type, detailed_analysis):
-    """Generate highly tailored questions based on specific report content"""
+    """Generate highly tailored questions based on specific report content - STRICT VERSION"""
     
     if not openai_available:
         return generate_template_questions(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []))
@@ -181,49 +183,60 @@ def generate_ai_questions_enhanced(report_content, executive_role, company_name,
         strategic_initiatives = detailed_analysis.get("strategic_initiatives", [])
         assumptions = detailed_analysis.get("assumptions", [])
         
-        content_summary = f"""
-        Key Details from Report: {', '.join(key_details[:5])}
-        Financial Claims: {', '.join(financial_claims[:3])}
-        Strategic Initiatives: {', '.join(strategic_initiatives[:3])}
-        Key Assumptions: {', '.join(assumptions[:3])}
-        """
-        
         prompt = f"""
-        You are a seasoned {executive_role} at a major corporation reviewing this {report_type} for {company_name} in the {industry} industry.
+        CRITICAL INSTRUCTIONS: You are a {executive_role} reviewing a {report_type} for {company_name} in {industry}. 
         
-        Your focus areas as {executive_role}: {role_info['focus']}
+        STRICT REQUIREMENT: You MUST only reference content from the actual report provided below. DO NOT use examples from Tesla, Apple, Google, Amazon, or any other well-known companies unless they are explicitly mentioned in THIS specific report.
         
-        Based on the specific content below, generate 7 probing questions that:
-        1. Reference SPECIFIC details, numbers, or claims from the report
-        2. Challenge specific assumptions or projections mentioned
-        3. Focus on {role_info['question_types']}
-        4. Require detailed, substantive answers
-        5. Sound like they come from an experienced {executive_role}
+        FORBIDDEN: Do not mention Tesla, EVs, electric vehicles, Elon Musk, or any automotive examples unless they appear in the report below.
         
-        {content_summary}
+        Company being analyzed: {company_name}
+        Industry: {industry}
         
-        Report excerpt (reference specific details from here):
+        YOUR ROLE: {executive_role} focusing on {role_info['focus']}
+        
+        REPORT CONTENT TO ANALYZE (this is the ONLY content you should reference):
+        ===== START REPORT =====
         {report_content[:4000]}
+        ===== END REPORT =====
         
-        Generate exactly 7 questions that directly reference specific content from the report above. Each question should cite specific details, numbers, or claims mentioned in the report.
+        KEY DETAILS EXTRACTED: {', '.join(key_details[:5])}
+        FINANCIAL CLAIMS: {', '.join(financial_claims[:3])}
+        STRATEGIC INITIATIVES: {', '.join(strategic_initiatives[:3])}
         
-        Format as numbered list:
+        TASK: Generate exactly 7 questions that:
+        1. ONLY reference content from the report above about {company_name}
+        2. Challenge specific assumptions mentioned in {company_name}'s {report_type}
+        3. Focus on {role_info['question_types']} for {company_name}
+        4. Quote specific numbers, percentages, timelines, or claims from the report
+        5. Never mention companies not in the report
+        
+        Start each question with "In your {report_type}, you mention..." or "Your report states..." or "According to your analysis..."
+        
+        Format as numbered list focusing ONLY on {company_name}:
         """
         
-        response = openai.ChatCompletion.create(
+        # FIXED: Use new OpenAI API format
+        client = openai.OpenAI(api_key=openai.api_key)
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": f"You are an experienced {executive_role} who asks tough, specific questions that reference actual report content."},
+                {
+                    "role": "system", 
+                    "content": f"You are a {executive_role} who ONLY asks questions about the specific company and content in the provided report. You never reference Tesla, Apple, or other famous companies unless they are mentioned in the actual report. You are strict about only using the provided report content."
+                },
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=1000,
-            temperature=0.6
+            max_tokens=1200,
+            temperature=0.3  # Lower temperature for more focused responses
         )
         
-        questions_text = response['choices'][0]['message']['content'].strip()
+        questions_text = response.choices[0].message.content.strip()
         
-        # Parse questions from response
+        # Parse questions and filter out any that mention forbidden terms
         questions = []
+        forbidden_terms = ['tesla', 'elon musk', 'electric vehicle', 'ev market', 'automotive', 'model 3', 'model s']
+        
         for line in questions_text.split('\n'):
             line = line.strip()
             if line and (line[0].isdigit() or line.startswith('-') or line.startswith('•')):
@@ -231,10 +244,17 @@ def generate_ai_questions_enhanced(report_content, executive_role, company_name,
                 question = line.split('.', 1)[-1].strip()
                 question = question.split(')', 1)[-1].strip()
                 question = question.lstrip('- •').strip()
-                if len(question) > 20:  # Valid question
+                
+                # Check if question contains forbidden terms
+                if len(question) > 20 and not any(term in question.lower() for term in forbidden_terms):
                     questions.append(question)
         
-        return questions[:7] if questions else generate_template_questions(executive_role, company_name, industry, report_type, key_details)
+        # If we got good questions, return them; otherwise fall back
+        if len(questions) >= 3:
+            return questions[:7]
+        else:
+            print(f"AI generated questions with forbidden content for {company_name}, falling back to templates")
+            return generate_template_questions(executive_role, company_name, industry, report_type, key_details)
         
     except Exception as e:
         print(f"Enhanced AI question generation failed for {executive_role}: {e}")
@@ -753,19 +773,6 @@ def download_transcript():
         print(f"Download transcript error: {e}")
         return jsonify({'status': 'error', 'error': f'Error generating transcript: {str(e)}'})
 
-# Logo serving route (if logo is in root directory)
-@app.route('/mccombs-logo.jpg')
-def serve_logo():
-    """Serve the McCombs logo from the root directory"""
-    try:
-        from flask import send_file
-        import os
-        logo_path = os.path.join(os.getcwd(), 'mccombs-logo.jpg')
-        return send_file(logo_path, mimetype='image/jpeg')
-    except Exception as e:
-        print(f"Error serving logo: {e}")
-        return "Logo not found", 404
-
 @app.route('/debug_ai', methods=['GET'])
 def debug_ai():
     """Debug route to see what AI analysis is producing"""
@@ -794,6 +801,18 @@ def debug_ai():
     except Exception as e:
         return jsonify({'error': str(e)})
 
+# Logo serving route (if logo is in root directory)
+@app.route('/mccombs-logo.jpg')
+def serve_logo():
+    """Serve the McCombs logo from the root directory"""
+    try:
+        from flask import send_file
+        import os
+        logo_path = os.path.join(os.getcwd(), 'mccombs-logo.jpg')
+        return send_file(logo_path, mimetype='image/jpeg')
+    except Exception as e:
+        print(f"Error serving logo: {e}")
+        return "Logo not found", 404
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
