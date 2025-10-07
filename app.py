@@ -118,6 +118,7 @@ Return JSON:
         if response_text:
             try:
                 # Try to parse JSON
+                import json
                 analysis = json.loads(response_text)
                 print(f"✅ AI analysis completed for {company_name}")
                 return {
@@ -217,7 +218,7 @@ Format as numbered list:"""
         
         response_text = call_openai_with_timeout(prompt_data, timeout=15)
         
-          if response_text:
+        if response_text:
             # Parse questions with RELAXED validation
             questions = []
             forbidden_terms = ['tesla', 'apple', 'google', 'amazon', 'microsoft', 'facebook', 'meta']
