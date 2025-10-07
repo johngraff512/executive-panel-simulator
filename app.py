@@ -12,24 +12,31 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Initialize OpenAI client (modern version)
+# Initialize OpenAI client - TEMPORARILY DISABLED FOR DEBUGGING
 openai_client = None
 openai_available = False
 
+# Force disable AI to debug other issues
+FORCE_DISABLE_AI = True
+
 try:
-    api_key = os.environ.get('OPENAI_API_KEY')
-    if api_key:
-        openai.api_key = api_key
-        openai_available = True
-        print("✅ OpenAI API key found - AI-powered questions enabled")
+    if not FORCE_DISABLE_AI:
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if api_key:
+            openai.api_key = api_key
+            openai_available = True
+            print("✅ OpenAI API key found - AI-powered questions enabled")
+        else:
+            print("⚠️ No OpenAI API key found - running in demo mode")
     else:
-        print("⚠️ No OpenAI API key found - running in demo mode")
+        print("⚠️ AI temporarily disabled for debugging - running in demo mode")
 except ImportError as e:
     print(f"❌ OpenAI library not available: {e}")
     openai_available = False
 except Exception as e:
     print(f"❌ OpenAI initialization failed: {e}")
     openai_available = False
+
 
 # PDF Processing Functions
 def extract_text_from_pdf(pdf_file):
@@ -517,8 +524,8 @@ def setup_session():
         session['industry'] = industry
         session['report_type'] = report_type
         session['selected_executives'] = selected_executives
-        session['report_content'] = report_content[:8000]  # Store more content for better questions
-        session['detailed_analysis'] = detailed_analysis  # Store detailed analysis instead of just themes
+        session['report_content'] = report_content[:2000]  # Reduced to fix cookie size issue
+        session['detailed_analysis'] = {'key_details': detailed_analysis.get('key_details', [])[:3]}  # Store only essential data
         session['conversation_history'] = []
         session['session_type'] = session_type
         session['question_limit'] = question_limit
