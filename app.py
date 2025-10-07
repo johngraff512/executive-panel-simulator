@@ -81,9 +81,8 @@ def analyze_report_with_ai_enhanced(report_content, company_name, industry, repo
         }}
         """
         
-        # FIXED: Use new OpenAI API format
-        client = openai.OpenAI(api_key=openai.api_key)
-        response = client.chat.completions.create(
+        # FIXED: Use old OpenAI API format (0.28.1)
+        response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a senior executive analyst who extracts specific, actionable details from business reports."},
@@ -93,7 +92,7 @@ def analyze_report_with_ai_enhanced(report_content, company_name, industry, repo
             temperature=0.2
         )
         
-        analysis_text = response.choices[0].message.content.strip()
+        analysis_text = response['choices'][0]['message']['content'].strip()
         
         # Try to parse JSON response
         try:
@@ -216,9 +215,8 @@ def generate_ai_questions_enhanced(report_content, executive_role, company_name,
         Format as numbered list focusing ONLY on {company_name}:
         """
         
-        # FIXED: Use new OpenAI API format
-        client = openai.OpenAI(api_key=openai.api_key)
-        response = client.chat.completions.create(
+        # FIXED: Use old OpenAI API format (0.28.1)
+        response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
                 {
@@ -228,10 +226,10 @@ def generate_ai_questions_enhanced(report_content, executive_role, company_name,
                 {"role": "user", "content": prompt}
             ],
             max_tokens=1200,
-            temperature=0.3  # Lower temperature for more focused responses
+            temperature=0.3
         )
         
-        questions_text = response.choices[0].message.content.strip()
+        questions_text = response['choices'][0]['message']['content'].strip()
         
         # Parse questions and filter out any that mention forbidden terms
         questions = []
