@@ -766,6 +766,35 @@ def serve_logo():
         print(f"Error serving logo: {e}")
         return "Logo not found", 404
 
+@app.route('/debug_ai', methods=['GET'])
+def debug_ai():
+    """Debug route to see what AI analysis is producing"""
+    try:
+        debug_info = {
+            'openai_available': openai_available,
+            'session_data': {
+                'company_name': session.get('company_name', 'NOT SET'),
+                'industry': session.get('industry', 'NOT SET'),
+                'report_type': session.get('report_type', 'NOT SET'),
+                'has_report_content': bool(session.get('report_content')),
+                'report_content_length': len(session.get('report_content', '')),
+                'report_content_preview': session.get('report_content', '')[:500] + '...' if session.get('report_content') else 'NO CONTENT',
+                'has_detailed_analysis': bool(session.get('detailed_analysis')),
+                'detailed_analysis': session.get('detailed_analysis', {}),
+                'has_generated_questions': bool(session.get('generated_questions')),
+                'generated_questions_sample': {
+                    exec: questions[:2] if questions else []  # Show first 2 questions per exec
+                    for exec, questions in session.get('generated_questions', {}).items()
+                }
+            }
+        }
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
