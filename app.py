@@ -217,8 +217,8 @@ Format as numbered list:"""
         
         response_text = call_openai_with_timeout(prompt_data, timeout=15)
         
-        if response_text:
-            # Parse questions
+          if response_text:
+            # Parse questions with RELAXED validation
             questions = []
             forbidden_terms = ['tesla', 'apple', 'google', 'amazon', 'microsoft', 'facebook', 'meta']
             
@@ -231,16 +231,15 @@ Format as numbered list:"""
                     question = question.lstrip('- •').strip()
                     
                     # RELAXED validation - only check length and forbidden terms
-if (len(question) > 30 and 
-    not any(term in question.lower() for term in forbidden_terms)):
-    questions.append(question)
-
+                    if (len(question) > 30 and 
+                        not any(term in question.lower() for term in forbidden_terms)):
+                        questions.append(question)
             
-            if len(questions) >= 2:
+            if len(questions) >= 2:  # Reduced from 3 to 2
                 print(f"✅ Generated {len(questions)} AI questions for {executive_role}")
                 return questions[:5]
             else:
-                print(f"⚠️ AI questions filtered out for {executive_role}, using templates")
+                print(f"⚠️ Only {len(questions)} valid AI questions for {executive_role}, using templates")
                 return generate_template_questions(executive_role, company_name, industry, report_type, key_details)
         else:
             print(f"❌ AI question generation timed out for {executive_role}")
