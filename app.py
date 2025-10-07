@@ -1,22 +1,22 @@
 import os
 import tempfile
 import random
+import json
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, Response
 import PyPDF2
+import openai
 
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-
 # Initialize OpenAI client (legacy version)
 openai_client = None
 openai_available = False
 
 try:
-    import openai
     api_key = os.environ.get('OPENAI_API_KEY')
     if api_key:
         openai.api_key = api_key
@@ -50,66 +50,78 @@ def extract_text_from_pdf(pdf_file):
         print(f"Error extracting PDF text: {e}")
         return ""
 
-def analyze_report_with_ai(report_content, company_name, industry, report_type):
-    """Use OpenAI to analyze report content and extract key themes"""
-    if not openai_available or not openai_client:
-        # Fallback to basic analysis
+def analyze_report_with_ai_enhanced(report_content, company_name, industry, report_type):
+    """Enhanced AI analysis that extracts specific details, not just themes"""
+    if not openai_available:
         return analyze_report_themes_basic(report_content)
     
     try:
+        # Use more of the report content for better analysis
         prompt = f"""
-        Analyze this business report for {company_name} in the {industry} industry.
-        Report type: {report_type}
+        Analyze this {report_type} for {company_name} in the {industry} industry.
         
-        Extract 5-7 key strategic themes, challenges, or opportunities that executives would want to question.
-        Focus on areas that need deeper analysis or clarification.
+        Extract specific, concrete details that executives would question:
+        - Specific financial numbers, projections, or assumptions
+        - Concrete strategic initiatives or plans mentioned
+        - Specific market data, customer segments, or competitive claims
+        - Implementation timelines, resources, or operational details
+        - Risk factors or challenges explicitly mentioned
+        - Specific partnerships, technologies, or capabilities discussed
         
         Report content:
-        {report_content[:3000]}...
+        {report_content[:6000]}
         
-        Return only a Python list of themes, like:
-        ["market expansion strategy", "financial projections", "competitive positioning"]
+        Return a JSON object with:
+        {{
+            "key_details": ["specific detail 1", "specific detail 2", ...],
+            "financial_claims": ["specific financial claim 1", ...],
+            "strategic_initiatives": ["specific initiative 1", ...],
+            "assumptions": ["key assumption 1", ...],
+            "risks_mentioned": ["risk 1", ...]
+        }}
         """
         
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a business analyst extracting key themes from reports."},
+                {"role": "system", "content": "You are a senior executive analyst who extracts specific, actionable details from business reports."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=200,
-            temperature=0.3
+            max_tokens=400,
+            temperature=0.2
         )
         
-        # Parse the response to extract themes
-        themes_text = response['choices'][0]['message']['content'].strip()
+        analysis_text = response['choices'][0]['message']['content'].strip()
         
-        # Try to extract list from response
-        import ast
+        # Try to parse JSON response
         try:
-            themes = ast.literal_eval(themes_text)
-            if isinstance(themes, list):
-                return themes[:6]  # Limit to 6 themes
+            analysis = json.loads(analysis_text)
+            return analysis
         except:
-            pass
+            # Fallback: extract key phrases
+            lines = analysis_text.split('\n')
+            details = []
+            for line in lines:
+                line = line.strip('- "[]')
+                if line and len(line) > 10:
+                    details.append(line)
             
-        # Fallback: split by lines or commas
-        themes = []
-        for line in themes_text.split('\n'):
-            line = line.strip('- "[]')
-            if line and len(line) > 5:
-                themes.append(line)
-        
-        return themes[:6] if themes else ["your strategic approach"]
+            return {
+                "key_details": details[:8],
+                "financial_claims": [],
+                "strategic_initiatives": [],
+                "assumptions": [],
+                "risks_mentioned": []
+            }
         
     except Exception as e:
-        print(f"AI analysis failed: {e}")
-        return analyze_report_themes_basic(report_content)
+        print(f"Enhanced AI analysis failed: {e}")
+        return {"key_details": ["your strategic approach"], "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
 
 def analyze_report_themes_basic(report_content):
     """Basic keyword-based theme extraction (fallback)"""
     if not report_content or len(report_content) < 100:
-        return ["your main proposal"]
+        return {"key_details": ["your main proposal"], "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
     
     themes = []
     theme_keywords = {
@@ -128,55 +140,84 @@ def analyze_report_themes_basic(report_content):
         if any(keyword in content_lower for keyword in keywords):
             themes.append(theme)
     
-    return themes[:5] if themes else ["your strategic approach"]
+    return {"key_details": themes[:5] if themes else ["your strategic approach"], "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
 
-def generate_ai_questions(report_content, executive_role, company_name, industry, report_type, key_themes):
-    """Generate AI-powered questions based on report analysis"""
+def generate_ai_questions_enhanced(report_content, executive_role, company_name, industry, report_type, detailed_analysis):
+    """Generate highly tailored questions based on specific report content"""
     
-    if not openai_available or not openai_client:
-        # Fallback to template-based questions
-        return generate_template_questions(executive_role, company_name, industry, report_type, key_themes)
+    if not openai_available:
+        return generate_template_questions(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []))
     
     try:
-        # Create role-specific context
-        role_contexts = {
-            'CEO': 'strategic vision, market positioning, competitive advantage, long-term growth, stakeholder value',
-            'CFO': 'financial performance, cash flow, profitability, investment returns, financial risks, capital allocation',
-            'CTO': 'technology architecture, scalability, technical risks, innovation, development timeline, data security',
-            'CMO': 'market positioning, customer acquisition, brand strategy, marketing ROI, customer retention',
-            'COO': 'operational efficiency, process optimization, supply chain, quality control, execution capabilities'
+        # Create role-specific focus areas
+        role_focuses = {
+            'CEO': {
+                'focus': 'strategic vision, competitive positioning, market opportunity, long-term sustainability',
+                'question_types': 'strategic challenges, market validation, competitive threats, scalability concerns'
+            },
+            'CFO': {
+                'focus': 'financial viability, cash flow, profitability, investment returns, financial risks',
+                'question_types': 'financial assumptions, revenue model validation, cost structure, funding needs'
+            },
+            'CTO': {
+                'focus': 'technology feasibility, scalability, technical risks, innovation, development execution',
+                'question_types': 'technical architecture, development timeline, technology risks, scalability challenges'
+            },
+            'CMO': {
+                'focus': 'market positioning, customer acquisition, brand strategy, marketing effectiveness, customer retention',
+                'question_types': 'market validation, customer acquisition strategy, marketing ROI, competitive differentiation'
+            },
+            'COO': {
+                'focus': 'operational execution, process efficiency, supply chain, quality control, implementation',
+                'question_types': 'execution risks, operational scalability, process optimization, resource allocation'
+            }
         }
         
-        role_context = role_contexts.get(executive_role, 'business strategy and operations')
-        themes_str = ', '.join(key_themes[:4])
+        role_info = role_focuses.get(executive_role, role_focuses['CEO'])
+        
+        # Prepare specific content for AI
+        key_details = detailed_analysis.get("key_details", [])
+        financial_claims = detailed_analysis.get("financial_claims", [])
+        strategic_initiatives = detailed_analysis.get("strategic_initiatives", [])
+        assumptions = detailed_analysis.get("assumptions", [])
+        
+        content_summary = f"""
+        Key Details from Report: {', '.join(key_details[:5])}
+        Financial Claims: {', '.join(financial_claims[:3])}
+        Strategic Initiatives: {', '.join(strategic_initiatives[:3])}
+        Key Assumptions: {', '.join(assumptions[:3])}
+        """
         
         prompt = f"""
-        You are a senior {executive_role} reviewing a {report_type} for {company_name} in the {industry} industry.
+        You are a seasoned {executive_role} at a major corporation reviewing this {report_type} for {company_name} in the {industry} industry.
         
-        Key themes identified: {themes_str}
+        Your focus areas as {executive_role}: {role_info['focus']}
         
-        As a {executive_role}, generate 7 challenging but fair questions that focus on {role_context}.
-        Questions should:
-        - Be specific to the {industry} industry
-        - Reference the key themes when relevant
-        - Challenge assumptions and require detailed responses
-        - Be appropriate for a {executive_role} to ask
-        - Include follow-up probes for deeper analysis
+        Based on the specific content below, generate 7 probing questions that:
+        1. Reference SPECIFIC details, numbers, or claims from the report
+        2. Challenge specific assumptions or projections mentioned
+        3. Focus on {role_info['question_types']}
+        4. Require detailed, substantive answers
+        5. Sound like they come from an experienced {executive_role}
         
-        Report excerpt:
-        {report_content[:2000]}...
+        {content_summary}
         
-        Return exactly 7 questions as a numbered list:
+        Report excerpt (reference specific details from here):
+        {report_content[:4000]}
+        
+        Generate exactly 7 questions that directly reference specific content from the report above. Each question should cite specific details, numbers, or claims mentioned in the report.
+        
+        Format as numbered list:
         """
         
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": f"You are an experienced {executive_role} asking strategic questions about business presentations."},
+                {"role": "system", "content": f"You are an experienced {executive_role} who asks tough, specific questions that reference actual report content."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=800,
-            temperature=0.7
+            max_tokens=1000,
+            temperature=0.6
         )
         
         questions_text = response['choices'][0]['message']['content'].strip()
@@ -193,11 +234,11 @@ def generate_ai_questions(report_content, executive_role, company_name, industry
                 if len(question) > 20:  # Valid question
                     questions.append(question)
         
-        return questions[:7] if questions else generate_template_questions(executive_role, company_name, industry, report_type, key_themes)
+        return questions[:7] if questions else generate_template_questions(executive_role, company_name, industry, report_type, key_details)
         
     except Exception as e:
-        print(f"AI question generation failed for {executive_role}: {e}")
-        return generate_template_questions(executive_role, company_name, industry, report_type, key_themes)
+        print(f"Enhanced AI question generation failed for {executive_role}: {e}")
+        return generate_template_questions(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []))
 
 def generate_template_questions(executive_role, company_name, industry, report_type, key_themes):
     """Generate template-based questions (fallback)"""
@@ -207,47 +248,47 @@ def generate_template_questions(executive_role, company_name, industry, report_t
     role_templates = {
         'CEO': [
             f"Looking at your {report_type.lower()} for {company_name}, what's the biggest strategic risk in the {industry} sector that you haven't addressed?",
-            f"Your approach to {theme} is interesting, but how does it differentiate {company_name} from established players in {industry} industry?",
-            f"If the {industry} industry market conditions change significantly, what's your pivot strategy?",
-            f"How do you plan to scale {theme} while maintaining competitive advantage in {industry} industry?",
-            f"What would trigger you to completely rethink your strategy for {company_name}?",
-            f"Looking at {company_name}'s position, what do you think is our sustainable competitive moat?",
+            f"Your approach to {theme} is interesting, but how does it differentiate {company_name} from established players in {industry}?",
+            f"If the {industry} market conditions change significantly, what's your pivot strategy?",
+            f"How do you plan to scale {theme} while maintaining competitive advantage in {industry}?",
+            f"What would trigger you to completely rethink your {industry} strategy?",
+            f"Looking at {company_name}'s position, what's your sustainable competitive moat?",
             f"How does this {report_type.lower()} align with broader {industry} industry trends?"
         ],
         'CFO': [
-            f"Your financial projections for {company_name} seem aggressive for the {industry} industry - what's driving these assumptions?",
-            f"I'm concerned about cash flow for your proposed initiatives. How will you fund this?",
-            f"Your cost structure appears optimistic for {industry} industry. What if operating costs increase by 30%?",
+            f"Your financial projections for {company_name} seem aggressive for the {industry} sector - what's driving these assumptions?",
+            f"I'm concerned about cash flow in your {theme} initiative. How will you fund this without diluting equity?",
+            f"Your cost structure appears optimistic for {industry}. What if operating costs increase by 30%?",
             f"How did you validate the revenue assumptions for {company_name} in the {industry} market?",
-            f"What's your plan if {company_name} needs 20% more capital than projected?",
+            f"What's your plan if {company_name} needs 50% more capital than projected?",
             f"How will you measure ROI on your {theme} investments?",
-            f"What financial metrics will determine success or failure of your proposed strategy?"
+            f"What financial metrics will determine success or failure of this {industry} strategy?"
         ],
         'CTO': [
-            f"Your technology approach for {company_name} raises scalability concerns. How will this work at enterprise scale?",
+            f"Your technology approach for {company_name} raises scalability concerns. How will this work at enterprise scale in {industry}?",
             f"What's your biggest technical risk in implementing {theme}, and how are you mitigating it?",
-            f"The {industry} sector has specific compliance requirements - how does your tech plan address these?",
+            f"The {industry} sector has specific compliance requirements - how does your tech stack address these?",
             f"What happens if your core technical assumptions about {theme} prove incorrect?",
-            f"How does {company_name}'s technology compare to industry standards in the {industry} industry?",
+            f"How does {company_name}'s technology compare to industry standards in {industry}?",
             f"What's your technical debt strategy as you scale this {industry} solution?",
             f"How will you handle data security and privacy in the {industry} context?"
         ],
         'CMO': [
-            f"Your customer acquisition strategy for {company_name} seems ambitious - how will you actually reach these customers?",
-            f"I don't see strong differentiation in your {theme} value proposition. What makes you your proposed initiatives stand out vs {industry} competition?",
-            f"Your marketing budget assumptions - are these based on actual {industry} industry benchmarks?",
+            f"Your customer acquisition strategy for {company_name} in {industry} seems ambitious - how will you actually reach these customers?",
+            f"I don't see strong differentiation in your {theme} value proposition. What makes you unique in {industry}?",
+            f"Your marketing budget assumptions - are these based on actual {industry} benchmarks?",
             f"How do you plan to compete against established brands in the {industry} market?",
-            f"What's your customer retention strategy beyond initial acquisition for {company_name}?",
+            f"What's your customer retention strategy beyond initial acquisition in {industry}?",
             f"How will you measure marketing ROI for {company_name}'s {theme} initiative?",
-            f"What customer feedback have you gathered about your {theme} approach?"
+            f"What customer feedback have you gathered about your {industry} approach?"
         ],
         'COO': [
-            f"The operational plan for {company_name}'s {theme} seems complex - what's your biggest execution risk?",
-            f"How will you scale operations while maintaining quality in the {industry} industry?",
-            f"Your timeline seems aggressive - what if key milestones are delayed in your rollout?",
+            f"The operational plan for {company_name}'s {theme} looks complex - what's your biggest execution risk?",
+            f"How will you scale operations while maintaining quality in the {industry} sector?",
+            f"Your timeline seems aggressive - what if key milestones are delayed in this {industry} rollout?",
             f"How have you validated your supply chain assumptions for the {industry} market?",
             f"What operational metrics will you track, and what are your targets for {theme}?",
-            f"How will you manage quality control as {company_name} grows?",
+            f"How will you manage quality control as {company_name} grows in {industry}?",
             f"What's your contingency plan if operations don't scale as expected?"
         ]
     }
@@ -342,7 +383,7 @@ def generate_transcript(session_data):
     else:
         session_date = "Date not recorded"
     
-    ai_mode = "AI-Powered" if openai_available else "Demo Mode"
+    ai_mode = "AI-Enhanced" if openai_available else "Demo Mode"
     
     transcript = f"""
 AI EXECUTIVE PANEL SIMULATOR - {ai_mode}
@@ -354,7 +395,7 @@ Industry: {industry}
 Report Type: {report_type}
 Session Date: {session_date}
 Executives Present: {', '.join(selected_executives)}
-AI Enhancement: {'Enabled' if openai_available else 'Template-based'}
+AI Enhancement: {'Enabled - Content-Driven Questions' if openai_available else 'Template-based'}
 
 ====================================
 PRESENTATION TRANSCRIPT
@@ -416,7 +457,7 @@ PRESENTATION TRANSCRIPT
     transcript += f"Total Questions Asked: {question_number - 1}\n"
     transcript += f"Executives Participated: {len(selected_executives)}\n"
     if openai_available:
-        transcript += f"AI Enhancement: OpenAI GPT-4o-mini\n"
+        transcript += f"AI Enhancement: OpenAI GPT-4o-mini with Content-Driven Analysis\n"
     
     return transcript
 
@@ -451,15 +492,15 @@ def setup_session():
         if not report_content:
             return jsonify({'status': 'error', 'error': 'Could not extract text from PDF. Please ensure it\'s a text-based PDF.'})
         
-        # AI-powered analysis
-        key_themes = analyze_report_with_ai(report_content, company_name, industry, report_type)
+        # Enhanced AI-powered analysis - extracts specific details instead of just themes
+        detailed_analysis = analyze_report_with_ai_enhanced(report_content, company_name, industry, report_type)
         
         session['company_name'] = company_name
         session['industry'] = industry
         session['report_type'] = report_type
         session['selected_executives'] = selected_executives
-        session['report_content'] = report_content[:5000]
-        session['key_themes'] = key_themes
+        session['report_content'] = report_content[:8000]  # Store more content for better questions
+        session['detailed_analysis'] = detailed_analysis  # Store detailed analysis instead of just themes
         session['conversation_history'] = []
         session['session_type'] = session_type
         session['question_limit'] = question_limit
@@ -467,12 +508,15 @@ def setup_session():
         session['session_start_time'] = datetime.now().isoformat()
         session['used_questions'] = {exec: [] for exec in selected_executives}
         
+        # Show what was extracted for debugging
+        key_details = detailed_analysis.get("key_details", [])[:3]
+        
         return jsonify({
             'status': 'success',
-            'message': f'Report analyzed successfully! Found {len(report_content)} characters of content. {"AI-powered" if openai_available else "Template-based"} questions generated.',
+            'message': f'Report analyzed successfully! Found {len(report_content)} characters of content. {"AI-enhanced content-driven" if openai_available else "Template-based"} questions generated.',
             'executives': selected_executives,
             'ai_enabled': openai_available,
-            'key_themes': key_themes[:3]
+            'key_details': key_details  # Show specific details extracted
         })
         
     except Exception as e:
@@ -490,17 +534,17 @@ def start_presentation():
         industry = session.get('industry', '')
         report_type = session.get('report_type', '')
         report_content = session.get('report_content', '')
-        key_themes = session.get('key_themes', [])
+        detailed_analysis = session.get('detailed_analysis', {})  # Use detailed analysis instead of themes
         conversation_history = session.get('conversation_history', [])
         
         if not selected_executives:
             return jsonify({'status': 'error', 'error': 'No executives selected'})
         
-        # Generate AI-powered questions for all executives
+        # Generate enhanced AI-powered questions for all executives
         all_questions = {}
         for exec_role in selected_executives:
-            questions = generate_ai_questions(
-                report_content, exec_role, company_name, industry, report_type, key_themes
+            questions = generate_ai_questions_enhanced(
+                report_content, exec_role, company_name, industry, report_type, detailed_analysis
             )
             all_questions[exec_role] = questions
         
@@ -694,7 +738,7 @@ def download_transcript():
         safe_company_name = "".join(c for c in company_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
         safe_company_name = safe_company_name.replace(' ', '_')
         
-        ai_suffix = "_AI" if openai_available else "_Demo"
+        ai_suffix = "_AI_Enhanced" if openai_available else "_Demo"
         filename = f"{safe_company_name}_Executive_Panel_Transcript{ai_suffix}_{session_date}.txt"
         
         response = Response(
@@ -728,7 +772,7 @@ if __name__ == '__main__':
     
     print("🚀 AI Executive Panel Simulator Starting...")
     print(f"📁 Current directory: {os.getcwd()}")
-    print(f"🤖 AI Enhancement: {'Enabled' if openai_available else 'Disabled (Demo Mode)'}")
+    print(f"🤖 AI Enhancement: {'Enabled - Content-Driven Questions' if openai_available else 'Disabled (Demo Mode)'}")
     print(f"🌐 Running on port: {port}")
     print("="*50)
     
