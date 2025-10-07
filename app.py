@@ -3,6 +3,7 @@ import tempfile
 import random
 import json
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from flask import Flask, render_template, request, jsonify, session, Response
 import PyPDF2
 import openai
@@ -12,24 +13,23 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Initialize OpenAI client - TEMPORARILY DISABLED FOR DEBUGGING
+# Initialize OpenAI client - ROBUST VERSION WITH TIMEOUT MANAGEMENT
 openai_client = None
 openai_available = False
 
-# Force disable AI to debug other issues
-FORCE_DISABLE_AI = True
+# Configuration for AI features
+AI_TIMEOUT = 20  # seconds - shorter timeout to prevent worker kills
+AI_MAX_RETRIES = 2
+AI_ENABLED = True  # Toggle to easily disable if needed
 
 try:
-    if not FORCE_DISABLE_AI:
-        api_key = os.environ.get('OPENAI_API_KEY')
-        if api_key:
-            openai.api_key = api_key
-            openai_available = True
-            print("✅ OpenAI API key found - AI-powered questions enabled")
-        else:
-            print("⚠️ No OpenAI API key found - running in demo mode")
+    api_key = os.environ.get('OPENAI_API_KEY')
+    if api_key and AI_ENABLED:
+        openai.api_key = api_key
+        openai_available = True
+        print("✅ OpenAI API key found - AI-powered questions enabled with timeout management")
     else:
-        print("⚠️ AI temporarily disabled for debugging - running in demo mode")
+        print("⚠️ AI disabled or no API key found - running in demo mode")
 except ImportError as e:
     print(f"❌ OpenAI library not available: {e}")
     openai_available = False
@@ -37,6 +37,32 @@ except Exception as e:
     print(f"❌ OpenAI initialization failed: {e}")
     openai_available = False
 
+def call_openai_with_timeout(prompt_data, timeout=AI_TIMEOUT):
+    """Make OpenAI API call with timeout protection"""
+    def make_api_call():
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-4o-mini",
+                messages=prompt_data['messages'],
+                max_tokens=prompt_data.get('max_tokens', 800),
+                temperature=prompt_data.get('temperature', 0.3)
+            )
+            return response['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f"OpenAI API call failed: {e}")
+            return None
+    
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(make_api_call)
+            result = future.result(timeout=timeout)
+            return result
+    except FutureTimeoutError:
+        print(f"OpenAI API call timed out after {timeout} seconds")
+        return None
+    except Exception as e:
+        print(f"OpenAI API call error: {e}")
+        return None
 
 # PDF Processing Functions
 def extract_text_from_pdf(pdf_file):
@@ -57,74 +83,63 @@ def extract_text_from_pdf(pdf_file):
         print(f"Error extracting PDF text: {e}")
         return ""
 
-def analyze_report_with_ai_enhanced(report_content, company_name, industry, report_type):
-    """Enhanced AI analysis that extracts specific details, not just themes"""
+def analyze_report_with_ai_robust(report_content, company_name, industry, report_type):
+    """Robust AI analysis with timeout protection and fallback"""
     if not openai_available:
         return analyze_report_themes_basic(report_content)
     
+    print(f"🤖 Starting AI analysis for {company_name} in {industry}...")
+    
     try:
-        # Use more of the report content for better analysis
-        prompt = f"""
-        Analyze this {report_type} for {company_name} in the {industry} industry.
-        
-        Extract specific, concrete details that executives would question:
-        - Specific financial numbers, projections, or assumptions
-        - Concrete strategic initiatives or plans mentioned
-        - Specific market data, customer segments, or competitive claims
-        - Implementation timelines, resources, or operational details
-        - Risk factors or challenges explicitly mentioned
-        - Specific partnerships, technologies, or capabilities discussed
-        
-        Report content:
-        {report_content[:6000]}
-        
-        Return a JSON object with:
-        {{
-            "key_details": ["specific detail 1", "specific detail 2", ...],
-            "financial_claims": ["specific financial claim 1", ...],
-            "strategic_initiatives": ["specific initiative 1", ...],
-            "assumptions": ["key assumption 1", ...],
-            "risks_mentioned": ["risk 1", ...]
-        }}
-        """
-        
-        # FIXED: Use old OpenAI API format (0.28.1)
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a senior executive analyst who extracts specific, actionable details from business reports."},
-                {"role": "user", "content": prompt}
+        # Concise prompt for faster processing
+        prompt_data = {
+            'messages': [
+                {
+                    "role": "system", 
+                    "content": f"Extract 5 specific details from this {report_type} that executives would question. Focus on numbers, timelines, assumptions, and concrete claims. Respond with only a JSON object."
+                },
+                {
+                    "role": "user", 
+                    "content": f"""Company: {company_name} | Industry: {industry}
+                    
+Report (first 3000 chars):
+{report_content[:3000]}
+
+Return JSON:
+{{"key_details": ["detail 1", "detail 2", "detail 3", "detail 4", "detail 5"]}}"""
+                }
             ],
-            max_tokens=400,
-            temperature=0.2
-        )
+            'max_tokens': 300,  # Reduced for faster response
+            'temperature': 0.2
+        }
         
-        analysis_text = response['choices'][0]['message']['content'].strip()
+        response_text = call_openai_with_timeout(prompt_data, timeout=15)
         
-        # Try to parse JSON response
-        try:
-            analysis = json.loads(analysis_text)
-            return analysis
-        except:
-            # Fallback: extract key phrases
-            lines = analysis_text.split('\n')
-            details = []
-            for line in lines:
-                line = line.strip('- "[]')
-                if line and len(line) > 10:
-                    details.append(line)
-            
-            return {
-                "key_details": details[:8],
-                "financial_claims": [],
-                "strategic_initiatives": [],
-                "assumptions": [],
-                "risks_mentioned": []
-            }
+        if response_text:
+            try:
+                # Try to parse JSON
+                analysis = json.loads(response_text)
+                print(f"✅ AI analysis completed for {company_name}")
+                return {
+                    "key_details": analysis.get("key_details", [])[:5],
+                    "financial_claims": [],
+                    "strategic_initiatives": [],
+                    "assumptions": [],
+                    "risks_mentioned": []
+                }
+            except json.JSONDecodeError:
+                # Fallback: extract lines as details
+                lines = [line.strip() for line in response_text.split('\n') if line.strip() and len(line.strip()) > 10]
+                details = [line.strip('- "[]') for line in lines[:5]]
+                print(f"⚠️ AI response parsed as text for {company_name}")
+                return {"key_details": details, "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
+        else:
+            print(f"❌ AI analysis timed out for {company_name}, using fallback")
+            return analyze_report_themes_basic(report_content)
         
     except Exception as e:
-        print(f"Enhanced AI analysis failed: {e}")
-        return {"key_details": ["your strategic approach"], "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
+        print(f"❌ AI analysis failed for {company_name}: {e}")
+        return analyze_report_themes_basic(report_content)
 
 def analyze_report_themes_basic(report_content):
     """Basic keyword-based theme extraction (fallback)"""
@@ -150,119 +165,89 @@ def analyze_report_themes_basic(report_content):
     
     return {"key_details": themes[:5] if themes else ["your strategic approach"], "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
 
-def generate_ai_questions_enhanced(report_content, executive_role, company_name, industry, report_type, detailed_analysis):
-    """Generate highly tailored questions based on specific report content - STRICT VERSION"""
+def generate_ai_questions_robust(report_content, executive_role, company_name, industry, report_type, detailed_analysis):
+    """Generate AI questions with robust error handling and timeout protection"""
     
     if not openai_available:
         return generate_template_questions(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []))
     
+    print(f"🎯 Generating {executive_role} questions for {company_name}...")
+    
     try:
-        # Create role-specific focus areas
+        # Role-specific focus
         role_focuses = {
-            'CEO': {
-                'focus': 'strategic vision, competitive positioning, market opportunity, long-term sustainability',
-                'question_types': 'strategic challenges, market validation, competitive threats, scalability concerns'
-            },
-            'CFO': {
-                'focus': 'financial viability, cash flow, profitability, investment returns, financial risks',
-                'question_types': 'financial assumptions, revenue model validation, cost structure, funding needs'
-            },
-            'CTO': {
-                'focus': 'technology feasibility, scalability, technical risks, innovation, development execution',
-                'question_types': 'technical architecture, development timeline, technology risks, scalability challenges'
-            },
-            'CMO': {
-                'focus': 'market positioning, customer acquisition, brand strategy, marketing effectiveness, customer retention',
-                'question_types': 'market validation, customer acquisition strategy, marketing ROI, competitive differentiation'
-            },
-            'COO': {
-                'focus': 'operational execution, process efficiency, supply chain, quality control, implementation',
-                'question_types': 'execution risks, operational scalability, process optimization, resource allocation'
-            }
+            'CEO': 'strategic vision and competitive advantage',
+            'CFO': 'financial assumptions and profitability',
+            'CTO': 'technical feasibility and scalability',
+            'CMO': 'market positioning and customer acquisition',
+            'COO': 'operational execution and implementation'
         }
         
-        role_info = role_focuses.get(executive_role, role_focuses['CEO'])
-        
-        # Prepare specific content for AI
+        focus = role_focuses.get(executive_role, 'strategic approach')
         key_details = detailed_analysis.get("key_details", [])
-        financial_claims = detailed_analysis.get("financial_claims", [])
-        strategic_initiatives = detailed_analysis.get("strategic_initiatives", [])
-        assumptions = detailed_analysis.get("assumptions", [])
         
-        prompt = f"""
-        CRITICAL INSTRUCTIONS: You are a {executive_role} reviewing a {report_type} for {company_name} in {industry}. 
-        
-        STRICT REQUIREMENT: You MUST only reference content from the actual report provided below. DO NOT use examples from Tesla, Apple, Google, Amazon, or any other well-known companies unless they are explicitly mentioned in THIS specific report.
-        
-        FORBIDDEN: Do not mention Tesla, EVs, electric vehicles, Elon Musk, or any automotive examples unless they appear in the report below.
-        
-        Company being analyzed: {company_name}
-        Industry: {industry}
-        
-        YOUR ROLE: {executive_role} focusing on {role_info['focus']}
-        
-        REPORT CONTENT TO ANALYZE (this is the ONLY content you should reference):
-        ===== START REPORT =====
-        {report_content[:4000]}
-        ===== END REPORT =====
-        
-        KEY DETAILS EXTRACTED: {', '.join(key_details[:5])}
-        FINANCIAL CLAIMS: {', '.join(financial_claims[:3])}
-        STRATEGIC INITIATIVES: {', '.join(strategic_initiatives[:3])}
-        
-        TASK: Generate exactly 7 questions that:
-        1. ONLY reference content from the report above about {company_name}
-        2. Challenge specific assumptions mentioned in {company_name}'s {report_type}
-        3. Focus on {role_info['question_types']} for {company_name}
-        4. Quote specific numbers, percentages, timelines, or claims from the report
-        5. Never mention companies not in the report
-        
-        Start each question with "In your {report_type}, you mention..." or "Your report states..." or "According to your analysis..."
-        
-        Format as numbered list focusing ONLY on {company_name}:
-        """
-        
-        # FIXED: Use old OpenAI API format (0.28.1)
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[
+        # Streamlined prompt for faster processing
+        prompt_data = {
+            'messages': [
                 {
                     "role": "system", 
-                    "content": f"You are a {executive_role} who ONLY asks questions about the specific company and content in the provided report. You never reference Tesla, Apple, or other famous companies unless they are mentioned in the actual report. You are strict about only using the provided report content."
+                    "content": f"You are a {executive_role} asking specific questions about {company_name}. Reference ONLY content from their {report_type}. Never mention Tesla, Apple, or other companies not in the report."
                 },
-                {"role": "user", "content": prompt}
+                {
+                    "role": "user", 
+                    "content": f"""Company: {company_name} | Industry: {industry} | Your role: {executive_role}
+Focus on: {focus}
+
+Key details found: {', '.join(key_details[:3])}
+
+Report content:
+{report_content[:2000]}
+
+Generate exactly 5 specific questions that:
+1. Reference details from {company_name}'s {report_type}
+2. Challenge assumptions about {focus}
+3. Start with "In your {report_type}..." or "Your analysis states..."
+
+Format as numbered list:"""
+                }
             ],
-            max_tokens=1200,
-            temperature=0.3
-        )
+            'max_tokens': 600,  # Reduced for speed
+            'temperature': 0.4
+        }
         
-        questions_text = response['choices'][0]['message']['content'].strip()
+        response_text = call_openai_with_timeout(prompt_data, timeout=15)
         
-        # Parse questions and filter out any that mention forbidden terms
-        questions = []
-        forbidden_terms = ['tesla', 'elon musk', 'electric vehicle', 'ev market', 'automotive', 'model 3', 'model s']
-        
-        for line in questions_text.split('\n'):
-            line = line.strip()
-            if line and (line[0].isdigit() or line.startswith('-') or line.startswith('•')):
-                # Remove numbering and clean up
-                question = line.split('.', 1)[-1].strip()
-                question = question.split(')', 1)[-1].strip()
-                question = question.lstrip('- •').strip()
-                
-                # Check if question contains forbidden terms
-                if len(question) > 20 and not any(term in question.lower() for term in forbidden_terms):
-                    questions.append(question)
-        
-        # If we got good questions, return them; otherwise fall back
-        if len(questions) >= 3:
-            return questions[:7]
+        if response_text:
+            # Parse questions
+            questions = []
+            forbidden_terms = ['tesla', 'apple', 'google', 'amazon', 'microsoft', 'facebook', 'meta']
+            
+            for line in response_text.split('\n'):
+                line = line.strip()
+                if line and (line[0].isdigit() or line.startswith('-')):
+                    # Clean up question
+                    question = line.split('.', 1)[-1].strip()
+                    question = question.split(')', 1)[-1].strip()
+                    question = question.lstrip('- •').strip()
+                    
+                    # Validate question
+                    if (len(question) > 30 and 
+                        company_name.lower() in question.lower() and
+                        not any(term in question.lower() for term in forbidden_terms)):
+                        questions.append(question)
+            
+            if len(questions) >= 3:
+                print(f"✅ Generated {len(questions)} AI questions for {executive_role}")
+                return questions[:5]
+            else:
+                print(f"⚠️ AI questions filtered out for {executive_role}, using templates")
+                return generate_template_questions(executive_role, company_name, industry, report_type, key_details)
         else:
-            print(f"AI generated questions with forbidden content for {company_name}, falling back to templates")
-            return generate_template_questions(executive_role, company_name, industry, report_type, key_details)
+            print(f"❌ AI question generation timed out for {executive_role}")
+            return generate_template_questions(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []))
         
     except Exception as e:
-        print(f"Enhanced AI question generation failed for {executive_role}: {e}")
+        print(f"❌ AI question generation failed for {executive_role}: {e}")
         return generate_template_questions(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []))
 
 def generate_template_questions(executive_role, company_name, industry, report_type, key_themes):
@@ -408,7 +393,7 @@ def generate_transcript(session_data):
     else:
         session_date = "Date not recorded"
     
-    ai_mode = "AI-Enhanced" if openai_available else "Demo Mode"
+    ai_mode = "AI-Enhanced (Robust)" if openai_available else "Demo Mode"
     
     transcript = f"""
 AI EXECUTIVE PANEL SIMULATOR - {ai_mode}
@@ -420,7 +405,7 @@ Industry: {industry}
 Report Type: {report_type}
 Session Date: {session_date}
 Executives Present: {', '.join(selected_executives)}
-AI Enhancement: {'Enabled - Content-Driven Questions' if openai_available else 'Template-based'}
+AI Enhancement: {'Enabled - Content-Driven Questions with Timeout Management' if openai_available else 'Template-based'}
 
 ====================================
 PRESENTATION TRANSCRIPT
@@ -482,7 +467,7 @@ PRESENTATION TRANSCRIPT
     transcript += f"Total Questions Asked: {question_number - 1}\n"
     transcript += f"Executives Participated: {len(selected_executives)}\n"
     if openai_available:
-        transcript += f"AI Enhancement: OpenAI GPT-4o-mini with Content-Driven Analysis\n"
+        transcript += f"AI Enhancement: OpenAI GPT-4o-mini with Robust Timeout Management\n"
     
     return transcript
 
@@ -517,8 +502,8 @@ def setup_session():
         if not report_content:
             return jsonify({'status': 'error', 'error': 'Could not extract text from PDF. Please ensure it\'s a text-based PDF.'})
         
-        # Enhanced AI-powered analysis - extracts specific details instead of just themes
-        detailed_analysis = analyze_report_with_ai_enhanced(report_content, company_name, industry, report_type)
+        # Robust AI-powered analysis with timeout protection
+        detailed_analysis = analyze_report_with_ai_robust(report_content, company_name, industry, report_type)
         
         session['company_name'] = company_name
         session['industry'] = industry
@@ -538,7 +523,7 @@ def setup_session():
         
         return jsonify({
             'status': 'success',
-            'message': f'Report analyzed successfully! Found {len(report_content)} characters of content. {"AI-enhanced content-driven" if openai_available else "Template-based"} questions generated.',
+            'message': f'Report analyzed successfully! Found {len(report_content)} characters of content. {"AI-enhanced content-driven (robust)" if openai_available else "Template-based"} questions generated.',
             'executives': selected_executives,
             'ai_enabled': openai_available,
             'key_details': key_details  # Show specific details extracted
@@ -565,10 +550,10 @@ def start_presentation():
         if not selected_executives:
             return jsonify({'status': 'error', 'error': 'No executives selected'})
         
-        # Generate enhanced AI-powered questions for all executives
+        # Generate robust AI-powered questions for all executives
         all_questions = {}
         for exec_role in selected_executives:
-            questions = generate_ai_questions_enhanced(
+            questions = generate_ai_questions_robust(
                 report_content, exec_role, company_name, industry, report_type, detailed_analysis
             )
             all_questions[exec_role] = questions
@@ -763,7 +748,7 @@ def download_transcript():
         safe_company_name = "".join(c for c in company_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
         safe_company_name = safe_company_name.replace(' ', '_')
         
-        ai_suffix = "_AI_Enhanced" if openai_available else "_Demo"
+        ai_suffix = "_AI_Robust" if openai_available else "_Demo"
         filename = f"{safe_company_name}_Executive_Panel_Transcript{ai_suffix}_{session_date}.txt"
         
         response = Response(
@@ -784,6 +769,7 @@ def debug_ai():
     try:
         debug_info = {
             'openai_available': openai_available,
+            'ai_timeout': AI_TIMEOUT,
             'session_data': {
                 'company_name': session.get('company_name', 'NOT SET'),
                 'industry': session.get('industry', 'NOT SET'),
@@ -825,7 +811,7 @@ if __name__ == '__main__':
     
     print("🚀 AI Executive Panel Simulator Starting...")
     print(f"📁 Current directory: {os.getcwd()}")
-    print(f"🤖 AI Enhancement: {'Enabled - Content-Driven Questions' if openai_available else 'Disabled (Demo Mode)'}")
+    print(f"🤖 AI Enhancement: {'Enabled - Robust Content-Driven Questions with Timeout Management' if openai_available else 'Disabled (Demo Mode)'}")
     print(f"🌐 Running on port: {port}")
     print("="*50)
     
