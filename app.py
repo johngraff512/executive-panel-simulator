@@ -351,20 +351,23 @@ def get_next_executive(selected_executives, conversation_history):
     return candidates[0] if candidates else selected_executives[0]
 
 def check_session_limit(session_data):
-    """Check if session has reached its limit"""
+    """Check if session has reached its limit - FIXED VERSION"""
     session_type = session_data.get('session_type', 'questions')
     conversation_history = session_data.get('conversation_history', [])
     session_start = session_data.get('session_start_time')
+    current_question_count = session_data.get('current_question_count', 0)
     
     if session_type == 'questions':
         question_limit = int(session_data.get('question_limit', 10))
-        question_count = len([msg for msg in conversation_history if msg.get('type') == 'question'])
-        return question_count >= question_limit
+        print(f"🔢 Question count: {current_question_count}/{question_limit}")  # Debug logging
+        return current_question_count >= question_limit
     
     elif session_type == 'time' and session_start:
         time_limit = int(session_data.get('time_limit', 10))
         start_time = datetime.fromisoformat(session_start)
         elapsed = datetime.now() - start_time
+        elapsed_minutes = elapsed.total_seconds() / 60
+        print(f"⏰ Time elapsed: {elapsed_minutes:.1f}/{time_limit} minutes")  # Debug logging
         return elapsed.total_seconds() >= (time_limit * 60)
     
     return False
@@ -505,18 +508,21 @@ def setup_session():
         # Robust AI-powered analysis with timeout protection
         detailed_analysis = analyze_report_with_ai_robust(report_content, company_name, industry, report_type)
         
+        # DRASTICALLY reduce session data to prevent cookie overflow
         session['company_name'] = company_name
         session['industry'] = industry
         session['report_type'] = report_type
         session['selected_executives'] = selected_executives
-        session['report_content'] = report_content[:2000]  # Reduced to fix cookie size issue
-        session['detailed_analysis'] = {'key_details': detailed_analysis.get('key_details', [])[:3]}  # Store only essential data
+        # CRITICAL: Store minimal data only
+        session['report_content'] = report_content[:800]  # Reduced from 2000 to 800
+        session['detailed_analysis'] = {'key_details': detailed_analysis.get('key_details', [])[:2]}  # Reduced from 3 to 2
         session['conversation_history'] = []
         session['session_type'] = session_type
         session['question_limit'] = question_limit
         session['time_limit'] = time_limit
         session['session_start_time'] = datetime.now().isoformat()
-        session['used_questions'] = {exec: [] for exec in selected_executives}
+        # CRITICAL: Don't store used_questions in session - track separately
+        session['current_question_count'] = 0  # Track count instead
         
         # Show what was extracted for debugging
         key_details = detailed_analysis.get("key_details", [])[:3]
@@ -572,11 +578,8 @@ def start_presentation():
                 'timestamp': datetime.now().isoformat()
             }
             
-            used_questions = session.get('used_questions', {})
-            if first_exec not in used_questions:
-                used_questions[first_exec] = []
-            used_questions[first_exec].append(0)
-            session['used_questions'] = used_questions
+            # Track first question
+            session['current_question_count'] = 1
             
             conversation_history.append({
                 'type': 'question',
@@ -611,74 +614,80 @@ def respond_to_executive():
         selected_executives = session.get('selected_executives', [])
         conversation_history = session.get('conversation_history', [])
         generated_questions = session.get('generated_questions', {})
-        used_questions = session.get('used_questions', {})
+        current_question_count = session.get('current_question_count', 0)
         
+        # Add student response to conversation
         conversation_history.append({
             'type': 'response',
             'student_response': student_response,
             'timestamp': datetime.now().isoformat()
         })
         
-        session_data = {
-            'session_type': session.get('session_type', 'questions'),
-            'question_limit': session.get('question_limit', '10'),
-            'time_limit': session.get('time_limit', '10'),
-            'conversation_history': conversation_history,
-            'session_start_time': session.get('session_start_time')
-        }
+        session['conversation_history'] = conversation_history
         
-        if check_session_limit(session_data):
-            company_name = session.get('company_name', 'Your Company')
-            report_type = session.get('report_type', 'presentation')
-            closing_message = generate_closing_message(company_name, report_type)
-            
-            closing_question = {
-                'executive': 'CEO',
-                'name': get_executive_name('CEO'),
-                'title': 'CEO',
-                'question': closing_message,
-                'is_closing': True,
-                'timestamp': datetime.now().isoformat()
-            }
-            
-            conversation_history.append({
-                'type': 'closing',
-                'executive': 'CEO',
-                'message': closing_message,
-                'timestamp': datetime.now().isoformat()
-            })
-            
-            session['conversation_history'] = conversation_history
-            
-            return jsonify({
-                'status': 'success',
-                'follow_up': closing_question,
-                'session_ending': True
-            })
+        print(f"🔢 Question count: {current_question_count}")  # Debug logging
         
+        # FIXED session limit check
+        if session.get('session_type', 'questions') == 'questions':
+            question_limit = int(session.get('question_limit', 10))
+            if current_question_count >= question_limit:
+                print(f"🏁 Session limit reached: {current_question_count}/{question_limit}")
+                
+                company_name = session.get('company_name', 'Your Company')
+                report_type = session.get('report_type', 'presentation')
+                closing_message = generate_closing_message(company_name, report_type)
+                
+                closing_question = {
+                    'executive': 'CEO',
+                    'name': get_executive_name('CEO'),
+                    'title': 'CEO',
+                    'question': closing_message,
+                    'is_closing': True,
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+                conversation_history.append({
+                    'type': 'closing',
+                    'executive': 'CEO',
+                    'message': closing_message,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+                session['conversation_history'] = conversation_history
+                
+                return jsonify({
+                    'status': 'success',
+                    'follow_up': closing_question,
+                    'session_ending': True
+                })
+        
+        # Select next executive and question
         next_executive = get_next_executive(selected_executives, conversation_history)
         next_questions = generated_questions.get(next_executive, [])
-        exec_used_questions = used_questions.get(next_executive, [])
         
-        available_questions = [
-            (i, q) for i, q in enumerate(next_questions) 
-            if i not in exec_used_questions
-        ]
-        
-        if available_questions:
-            question_index, next_question = random.choice(available_questions)
-            exec_used_questions.append(question_index)
-            used_questions[next_executive] = exec_used_questions
-            session['used_questions'] = used_questions
+        # Simple question selection without storing used questions - FIXED
+        if next_questions:
+            # Use modulo to cycle through questions
+            question_index = (current_question_count) % len(next_questions)
+            next_question = next_questions[question_index]
+            print(f"🎯 {next_executive} asked question #{question_index+1}")
         else:
+            # Fallback questions - IMPROVED
             follow_ups = [
-                "That's interesting. Can you provide a specific example?",
-                "How would you measure success for that approach?",
-                "What would you do if that strategy doesn't work as expected?",
-                "Can you walk us through the implementation timeline?",
-                "What resources would you need to execute that plan?"
+                f"That's an interesting point about your {session.get('report_type', 'strategy').lower()}. Can you elaborate with a specific example?",
+                f"How would you measure success for that approach in the {session.get('industry', 'market')}?", 
+                f"What's your contingency plan if that {session.get('report_type', 'strategy').lower()} doesn't work as expected?",
+                f"Can you walk us through the timeline for implementing this in {session.get('company_name', 'your company')}?",
+                f"What resources would {session.get('company_name', 'your company')} need to execute that plan effectively?",
+                f"How does this approach address the competitive landscape in {session.get('industry', 'your industry')}?",
+                f"What are the biggest risks with this strategy for {session.get('company_name', 'your company')}?"
             ]
-            next_question = random.choice(follow_ups)
+            next_question = follow_ups[(current_question_count) % len(follow_ups)]
+            print(f"🔄 {next_executive} using contextual follow-up")
+        
+        # Update question count
+        current_question_count += 1
+        session['current_question_count'] = current_question_count
         
         follow_up = {
             'executive': next_executive,
@@ -780,6 +789,8 @@ def debug_ai():
                 'has_detailed_analysis': bool(session.get('detailed_analysis')),
                 'detailed_analysis': session.get('detailed_analysis', {}),
                 'has_generated_questions': bool(session.get('generated_questions')),
+                'current_question_count': session.get('current_question_count', 0),
+                'conversation_history_length': len(session.get('conversation_history', [])),
                 'generated_questions_sample': {
                     exec: questions[:2] if questions else []  # Show first 2 questions per exec
                     for exec, questions in session.get('generated_questions', {}).items()
