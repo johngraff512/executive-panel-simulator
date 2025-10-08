@@ -936,13 +936,13 @@ def debug_ai():
         return jsonify({'error': str(e)})
 
 # Logo serving route (if logo is in root directory)
-@app.route('/mccombs-logo.jpg')
+@app.route('/MSB-UT-Logo.jpg')
 def serve_logo():
     """Serve the McCombs logo from the root directory"""
     try:
         from flask import send_file
         import os
-        logo_path = os.path.join(os.getcwd(), 'mccombs-logo.jpg')
+        logo_path = os.path.join(os.getcwd(), 'MSB-UT-Logo.jpg')
         return send_file(logo_path, mimetype='image/jpeg')
     except Exception as e:
         print(f"Error serving logo: {e}")
