@@ -288,9 +288,24 @@ Format as numbered list:"""
         return generate_role_specific_templates(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []), previously_asked_questions)
 
 def generate_role_specific_templates(executive_role, company_name, industry, report_type, key_themes, previously_asked_questions=[]):
-    """Generate highly differentiated template questions with anti-repetition logic"""
+    """Generate highly differentiated template questions with anti-repetition logic - FIXED"""
     
-    theme = key_themes[0] if key_themes else "your strategy"
+    # FIX: Properly extract the theme from key_themes
+    if key_themes and len(key_themes) > 0:
+        # If key_themes is a list, take the first item
+        if isinstance(key_themes, list):
+            theme = key_themes[0] if key_themes[0] else "your strategy"
+        else:
+            theme = str(key_themes)
+    else:
+        theme = "your strategy"
+    
+    # Ensure theme is clean text (remove any JSON artifacts)
+    theme = str(theme).strip().strip('"').strip("'")
+    if not theme or theme == "key_details" or theme.startswith("key_details") or len(theme) < 3:
+        theme = f"{company_name}'s strategic approach"
+    
+    print(f"🔍 Debug: Using theme '{theme}' for {executive_role} template questions")  # Debug logging
     
     # HIGHLY DIFFERENTIATED role templates - each executive focuses on completely different aspects
     role_templates = {
@@ -305,15 +320,15 @@ def generate_role_specific_templates(executive_role, company_name, industry, rep
         ],
         'CFO': [
             f"Walk me through {company_name}'s cash conversion cycle - how long before we see positive free cash flow?",
-            f"Your CAPEX assumptions for {theme} - what if interest rates double and funding costs skyrocket?",
+            f"Your CAPEX assumptions for {company_name} - what if interest rates double and funding costs skyrocket?",
             f"I need to see the unit economics: what's the contribution margin for {company_name}'s core revenue streams?",
             f"How sensitive is {company_name}'s profitability to a 20% increase in your largest cost component?",
-            f"What's your debt-to-equity strategy, and how much dilution are shareholders facing with this {theme} plan?",
+            f"What's your debt-to-equity strategy, and how much dilution are shareholders facing with this {report_type.lower()}?",
             f"Show me the working capital requirements - what happens if customer payment terms extend by 30 days?",
             f"Your revenue recognition model for {industry} - are these projections compliant with current accounting standards?"
         ],
         'CTO': [
-            f"What's {company_name}'s technical architecture for {theme} - can it handle 10x user growth without rebuilding?",
+            f"What's {company_name}'s technical architecture - can it handle 10x user growth without rebuilding?",
             f"Your technology stack choices - how do they compare to industry standards for security and compliance in {industry}?",
             f"What's the migration path if your core technology becomes obsolete or gets deprecated?",
             f"How are you handling data pipeline architecture and real-time processing for {company_name}'s operations?",
@@ -323,18 +338,18 @@ def generate_role_specific_templates(executive_role, company_name, industry, rep
         ],
         'CMO': [
             f"What's {company_name}'s customer acquisition cost vs lifetime value ratio, and how does it compare to {industry} benchmarks?",
-            f"Your brand positioning for {theme} - how are you differentiating from established players in consumer perception?",
+            f"Your brand positioning strategy - how are you differentiating from established players in consumer perception?",
             f"What channels drive the highest quality leads for {company_name}, and what's your attribution model?",
             f"How do you measure brand equity, and what metrics prove {company_name} is winning mindshare in {industry}?",
-            f"Your content strategy for {theme} - how does it drive qualified prospects through the conversion funnel?",
+            f"Your content strategy - how does it drive qualified prospects through the conversion funnel?",
             f"What's {company_name}'s viral coefficient and organic growth rate from existing customers?",
             f"How are you personalizing the customer experience across touchpoints for different {industry} segments?"
         ],
         'COO': [
             f"What's {company_name}'s operational leverage - how does throughput scale as you add capacity?",
-            f"Your supply chain for {theme} - what happens if your primary supplier has a 6-month disruption?",
+            f"Your supply chain strategy - what happens if your primary supplier has a 6-month disruption?",
             f"How do you maintain quality standards as {company_name} scales operations 5x in the {industry} market?",
-            f"What's your talent acquisition strategy for scaling {theme} - can you hire fast enough to meet growth targets?",
+            f"What's your talent acquisition strategy - can you hire fast enough to meet growth targets?",
             f"Your process automation roadmap - which manual operations get automated first and what's the ROI?",
             f"How does {company_name}'s operational model handle seasonal demand fluctuations in {industry}?",
             f"What key performance indicators tell you when {company_name}'s operations are breaking down before customers notice?"
@@ -888,7 +903,7 @@ def download_transcript():
         safe_company_name = "".join(c for c in company_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
         safe_company_name = safe_company_name.replace(' ', '_')
         
-        ai_suffix = "_AI_AntiRepetition" if openai_available else "_Demo"
+        ai_suffix = "_AI_AntiRepetition_FIXED" if openai_available else "_Demo"
         filename = f"{safe_company_name}_Executive_Panel_Transcript{ai_suffix}_{session_date}.txt"
         
         response = Response(
@@ -927,7 +942,8 @@ def debug_ai():
                     for exec, questions in session.get('generated_questions', {}).items()
                 },
                 'anti_repetition_enabled': True,
-                'company_restrictions_removed': True
+                'company_restrictions_removed': True,
+                'theme_bug_fixed': True
             }
         }
         
@@ -955,7 +971,7 @@ if __name__ == '__main__':
     
     print("🚀 AI Executive Panel Simulator Starting...")
     print(f"📁 Current directory: {os.getcwd()}")
-    print(f"🤖 AI Enhancement: {'Enabled - Robust Content-Driven Questions with Smart Anti-Repetition & Competitor Mentions' if openai_available else 'Disabled (Demo Mode)'}")
+    print(f"🤖 AI Enhancement: {'Enabled - Robust Content-Driven Questions with Smart Anti-Repetition & Competitor Mentions (THEME BUG FIXED)' if openai_available else 'Disabled (Demo Mode)'}")
     print(f"🌐 Running on port: {port}")
     print("="*50)
     
