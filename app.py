@@ -17,8 +17,8 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 openai_client = None
 openai_available = False
 
-# Configuration for AI features
-AI_TIMEOUT = 20  # seconds - shorter timeout to prevent worker kills
+# Configuration for AI features - OPTIMIZED FOR FASTER GENERATION
+AI_TIMEOUT = 12  # Reduced from 20 to 12 seconds for faster generation
 AI_MAX_RETRIES = 2
 AI_ENABLED = True  # Toggle to easily disable if needed
 
@@ -27,7 +27,7 @@ try:
     if api_key and AI_ENABLED:
         openai.api_key = api_key
         openai_available = True
-        print("✅ OpenAI API key found - AI-powered questions enabled with timeout management")
+        print("✅ OpenAI API key found - AI-powered questions enabled with optimized timeouts")
     else:
         print("⚠️ AI disabled or no API key found - running in demo mode")
 except ImportError as e:
@@ -38,13 +38,13 @@ except Exception as e:
     openai_available = False
 
 def call_openai_with_timeout(prompt_data, timeout=AI_TIMEOUT):
-    """Make OpenAI API call with timeout protection"""
+    """Make OpenAI API call with timeout protection - OPTIMIZED"""
     def make_api_call():
         try:
             response = openai.ChatCompletion.create(
                 model="gpt-4o-mini",
                 messages=prompt_data['messages'],
-                max_tokens=prompt_data.get('max_tokens', 800),
+                max_tokens=prompt_data.get('max_tokens', 600),  # Reduced from 800
                 temperature=prompt_data.get('temperature', 0.3)
             )
             return response['choices'][0]['message']['content'].strip()
@@ -84,51 +84,43 @@ def extract_text_from_pdf(pdf_file):
         return ""
 
 def analyze_report_with_ai_robust(report_content, company_name, industry, report_type):
-    """Enhanced AI analysis with more themes extracted for longer sessions"""
+    """Enhanced AI analysis - OPTIMIZED for faster generation"""
     if not openai_available:
         return analyze_report_themes_basic(report_content)
     
-    print(f"🤖 Starting ENHANCED AI analysis for {company_name} in {industry}...")
+    print(f"🤖 Starting FAST AI analysis for {company_name} in {industry}...")
     
     try:
-        # Enhanced prompt for more comprehensive analysis
+        # Optimized prompt for faster processing
         prompt_data = {
             'messages': [
                 {
                     "role": "system", 
-                    "content": f"Extract 8-10 specific details from this {report_type} that different executives would question. Include financial metrics, strategic initiatives, operational details, market assumptions, technology aspects, and competitive positioning. Focus on concrete claims, numbers, timelines, and strategic decisions. Return only a JSON object."
+                    "content": f"Extract 6-8 key details from this {report_type} that executives would question. Return concise JSON only."
                 },
                 {
                     "role": "user", 
                     "content": f"""Company: {company_name} | Industry: {industry}
 
-Report content (first 4000 chars):
-{report_content[:4000]}
-
-Extract diverse details that would interest different executives:
-- CEO: Strategic vision, competitive advantage, market positioning
-- CFO: Financial projections, costs, revenue models, capital needs
-- CTO: Technology choices, scalability, technical risks
-- CMO: Customer acquisition, brand strategy, market penetration
-- COO: Operations, supply chain, execution, processes
+Report content (first 3000 chars):
+{report_content[:3000]}
 
 Return JSON:
-{{"key_details": ["detail 1", "detail 2", "detail 3", "detail 4", "detail 5", "detail 6", "detail 7", "detail 8"]}}"""
+{{"key_details": ["detail 1", "detail 2", "detail 3", "detail 4", "detail 5", "detail 6"]}}"""
                 }
             ],
-            'max_tokens': 500,  # Increased for more details
-            'temperature': 0.3
+            'max_tokens': 400,  # Reduced for faster response
+            'temperature': 0.2
         }
         
-        response_text = call_openai_with_timeout(prompt_data, timeout=18)
+        response_text = call_openai_with_timeout(prompt_data, timeout=10)  # Reduced timeout
         
         if response_text:
             try:
-                # Try to parse JSON
                 import json
                 analysis = json.loads(response_text)
-                details = analysis.get("key_details", [])[:10]  # Allow up to 10 details
-                print(f"✅ Enhanced AI analysis completed for {company_name} - extracted {len(details)} details")
+                details = analysis.get("key_details", [])[:8]
+                print(f"✅ FAST AI analysis completed for {company_name} - extracted {len(details)} details")
                 return {
                     "key_details": details,
                     "financial_claims": [],
@@ -137,9 +129,8 @@ Return JSON:
                     "risks_mentioned": []
                 }
             except json.JSONDecodeError:
-                # Fallback: extract lines as details
                 lines = [line.strip() for line in response_text.split('\n') if line.strip() and len(line.strip()) > 15]
-                details = [line.strip('- "[]') for line in lines[:8]]
+                details = [line.strip('- "[]') for line in lines[:6]]
                 print(f"⚠️ AI response parsed as text for {company_name} - extracted {len(details)} details")
                 return {"key_details": details, "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
         else:
@@ -151,24 +142,20 @@ Return JSON:
         return analyze_report_themes_basic(report_content)
 
 def analyze_report_themes_basic(report_content):
-    """Enhanced basic keyword-based theme extraction (fallback) - MORE THEMES"""
+    """Enhanced basic keyword-based theme extraction (fallback)"""
     if not report_content or len(report_content) < 100:
         return {"key_details": ["your main proposal"], "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
     
     themes = []
     theme_keywords = {
         'digital transformation': ['digital', 'technology', 'automation', 'AI', 'software', 'platform'],
-        'market expansion': ['expand', 'growth', 'market', 'international', 'new markets', 'geographic'],
-        'cost reduction': ['cost', 'efficiency', 'savings', 'optimize', 'reduce', 'streamline'],
-        'new product launch': ['product', 'launch', 'innovation', 'development', 'new offering'],
+        'market expansion': ['expand', 'growth', 'market', 'international', 'new markets'],
+        'cost reduction': ['cost', 'efficiency', 'savings', 'optimize', 'reduce'],
+        'new product launch': ['product', 'launch', 'innovation', 'development'],
         'customer experience': ['customer', 'experience', 'satisfaction', 'service', 'user'],
-        'sustainability': ['sustainable', 'green', 'environment', 'ESG', 'carbon', 'renewable'],
-        'financial strategy': ['revenue', 'profit', 'investment', 'funding', 'capital', 'financing'],
-        'competitive strategy': ['competition', 'competitor', 'market share', 'differentiation', 'advantage'],
-        'operational efficiency': ['operations', 'process', 'workflow', 'supply chain', 'manufacturing'],
-        'talent management': ['hiring', 'talent', 'employees', 'workforce', 'human resources'],
-        'partnerships': ['partnership', 'alliance', 'collaboration', 'joint venture', 'strategic'],
-        'regulatory compliance': ['regulation', 'compliance', 'legal', 'policy', 'government']
+        'sustainability': ['sustainable', 'green', 'environment', 'ESG'],
+        'financial strategy': ['revenue', 'profit', 'investment', 'funding', 'capital'],
+        'competitive strategy': ['competition', 'competitor', 'market share', 'differentiation']
     }
     
     content_lower = report_content.lower()
@@ -176,72 +163,61 @@ def analyze_report_themes_basic(report_content):
         if any(keyword in content_lower for keyword in keywords):
             themes.append(theme)
     
-    # Return more themes for longer sessions
-    return {"key_details": themes[:8] if themes else ["your strategic approach", "market positioning", "operational model"], "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
+    return {"key_details": themes[:6] if themes else ["your strategic approach", "market positioning"], "financial_claims": [], "strategic_initiatives": [], "assumptions": [], "risks_mentioned": []}
 
-def generate_ai_questions_robust_with_deduplication(report_content, executive_role, company_name, industry, report_type, detailed_analysis, previously_asked_questions=[]):
-    """Generate AI questions with RELAXED deduplication - allow same themes with different executive perspectives"""
+def generate_ai_questions_optimized(report_content, executive_role, company_name, industry, report_type, detailed_analysis, previously_asked_questions=[]):
+    """Generate AI questions - OPTIMIZED for speed with fewer API calls"""
     
     if not openai_available:
         return generate_role_specific_templates(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []), previously_asked_questions)
     
-    print(f"🎯 Generating {executive_role} questions for {company_name} (with RELAXED deduplication from {len(previously_asked_questions)} previous questions)...")
+    print(f"⚡ Generating FAST {executive_role} questions for {company_name}...")
     
     try:
-        # Role-specific focus with UNIQUE angles
+        # Role-specific focus
         role_focuses = {
-            'CEO': 'strategic vision, competitive positioning, and long-term market leadership',
-            'CFO': 'financial analysis, capital structure, and quantitative risk assessment',
-            'CTO': 'technical architecture, scalability engineering, and innovation systems',
-            'CMO': 'value proposition, customer loyalty, and market penetration',
-            'COO': 'operational processes, supply chain optimization, and execution logistics'
+            'CEO': 'strategic vision and competitive positioning',
+            'CFO': 'financial analysis and capital structure',
+            'CTO': 'technical architecture and scalability',
+            'CMO': 'value proposition and market penetration',
+            'COO': 'operational processes and execution'
         }
         
         focus = role_focuses.get(executive_role, 'strategic approach')
         key_details = detailed_analysis.get("key_details", [])
         
-        # Create RELAXED "avoid repetition" guidance for AI - only avoid identical questions
-        avoid_guidance = ""
-        if previously_asked_questions and len(previously_asked_questions) > 3:
-            # Only avoid if we have many previous questions, and only mention very specific overlaps
-            recent_questions = previously_asked_questions[-3:]  # Only look at last 3 questions
-            avoid_guidance = f"\n\nNote: Recent questions asked about similar topics, but approach from your unique {executive_role} perspective with different specific concerns."
-        
-        # Enhanced prompt for role-specific questions tied to report content
+        # Optimized prompt for faster generation
         prompt_data = {
             'messages': [
                 {
                     "role": "system", 
-                    "content": f"You are a {executive_role} asking specific questions about {company_name} based on their {report_type}. Ask about details from the actual report content from your {executive_role} perspective. You may mention competitors when relevant. Focus on {focus}."
+                    "content": f"You are a {executive_role}. Generate 4 specific questions about {company_name} from your {focus} perspective. Be concise."
                 },
                 {
                     "role": "user", 
-                    "content": f"""Company: {company_name} | Industry: {industry} | Your role: {executive_role}
-Your expertise: {focus}
+                    "content": f"""Company: {company_name} | Industry: {industry} | Role: {executive_role}
 
-Key details from their {report_type}: {', '.join(key_details[:5])}
+Key details: {', '.join(key_details[:3])}
 
-Report content (analyze this):
-{report_content[:2500]}{avoid_guidance}
+Report excerpt:
+{report_content[:1500]}
 
-Generate exactly 6 SPECIFIC questions that:
-1. Reference actual content/details from {company_name}'s {report_type}
-2. Approach from your {executive_role} perspective focusing on {focus}
-3. Ask about specific numbers, claims, assumptions, or strategies mentioned in the report
-4. Use your executive expertise to probe deeper into the details
-5. Start questions with "In your {report_type}..." or "Your analysis shows..." or "Looking at..."
+Generate exactly 4 questions that:
+1. Reference specific report details
+2. Focus on {focus}
+3. Start with "In your analysis..." or "Your plan shows..."
 
 Format as numbered list:"""
                 }
             ],
-            'max_tokens': 700,  # Increased for more detailed questions
+            'max_tokens': 400,  # Reduced for speed
             'temperature': 0.4
         }
         
-        response_text = call_openai_with_timeout(prompt_data, timeout=18)
+        response_text = call_openai_with_timeout(prompt_data, timeout=10)  # Reduced timeout
         
         if response_text:
-            # Parse questions with RELAXED validation
+            # Parse questions quickly
             questions = []
             
             for line in response_text.split('\n'):
@@ -251,50 +227,46 @@ Format as numbered list:"""
                     question = question.split(')', 1)[-1].strip()
                     question = question.lstrip('- •').strip()
                     
-                    # Relaxed validation - just check minimum length
-                    if len(question) > 25:
+                    if len(question) > 20:
                         questions.append(question)
             
-            # MUCH MORE RELAXED DEDUPLICATION - only filter truly identical questions
+            # Minimal deduplication - only check for nearly identical questions
             unique_questions = []
             for question in questions:
                 is_unique = True
-                for prev_q in previously_asked_questions:
-                    # Only filter if questions are nearly identical (90%+ word overlap)
+                for prev_q in previously_asked_questions[-3:]:  # Only check last 3
+                    # Only filter if 90%+ identical
                     q_words = set(question.lower().split())
                     prev_words = set(prev_q.lower().split())
                     
                     if len(q_words) > 0 and len(prev_words) > 0:
                         overlap_ratio = len(q_words.intersection(prev_words)) / max(len(q_words), len(prev_words))
-                        if overlap_ratio > 0.85:  # Only filter if 85%+ identical
-                            print(f"🔄 Filtered nearly identical question for {executive_role}: {question[:40]}...")
+                        if overlap_ratio > 0.9:  # Only filter if 90%+ identical
                             is_unique = False
                             break
                 
                 if is_unique:
                     unique_questions.append(question)
             
-            if len(unique_questions) >= 3:  # Lowered threshold from 2 to 3
-                print(f"✅ Generated {len(unique_questions)} content-driven AI questions for {executive_role}")
-                return unique_questions[:6]
+            if unique_questions:
+                print(f"✅ Generated {len(unique_questions)} FAST AI questions for {executive_role}")
+                return unique_questions[:4]  # Return up to 4 questions
             else:
-                print(f"⚠️ Only {len(unique_questions)} unique questions for {executive_role}, but using AI questions anyway")
-                # Use AI questions even if few, rather than falling back to templates
-                return unique_questions[:6] if unique_questions else questions[:6]
+                print(f"⚠️ Using templates for {executive_role} due to deduplication")
+                return generate_role_specific_templates(executive_role, company_name, industry, report_type, key_details, previously_asked_questions)[:4]
         else:
-            print(f"❌ AI question generation timed out for {executive_role}")
-            return generate_role_specific_templates(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []), previously_asked_questions)
+            print(f"❌ AI timeout for {executive_role}, using templates")
+            return generate_role_specific_templates(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []), previously_asked_questions)[:4]
         
     except Exception as e:
-        print(f"❌ AI question generation failed for {executive_role}: {e}")
-        return generate_role_specific_templates(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []), previously_asked_questions)
+        print(f"❌ AI failed for {executive_role}: {e}")
+        return generate_role_specific_templates(executive_role, company_name, industry, report_type, detailed_analysis.get("key_details", []), previously_asked_questions)[:4]
 
 def generate_role_specific_templates(executive_role, company_name, industry, report_type, key_themes, previously_asked_questions=[]):
-    """Generate highly differentiated template questions - ONLY USED AS LAST RESORT"""
+    """Generate template questions - OPTIMIZED with 4 questions each"""
     
-    # FIX: Properly extract the theme from key_themes
+    # Extract theme properly
     if key_themes and len(key_themes) > 0:
-        # If key_themes is a list, take the first item
         if isinstance(key_themes, list):
             theme = key_themes[0] if key_themes[0] else "your strategy"
         else:
@@ -302,82 +274,48 @@ def generate_role_specific_templates(executive_role, company_name, industry, rep
     else:
         theme = "your strategy"
     
-    # Ensure theme is clean text (remove any JSON artifacts)
     theme = str(theme).strip().strip('"').strip("'")
     if not theme or theme == "key_details" or theme.startswith("key_details") or len(theme) < 3:
         theme = f"{company_name}'s strategic approach"
     
-    print(f"⚠️ Using template questions for {executive_role} with theme '{theme}'")  # Debug logging
+    print(f"⚠️ Using optimized templates for {executive_role}")
     
-    # HIGHLY DIFFERENTIATED role templates - each executive focuses on completely different aspects
+    # OPTIMIZED templates - 4 questions each for speed
     role_templates = {
         'CEO': [
-            f"Looking at {company_name}'s long-term vision, what happens if the {industry} industry paradigm shifts completely in 5 years?",
-            f"Your board will want to know: what's {company_name}'s sustainable competitive moat that competitors can't replicate?",
-            f"If you had to defend this {report_type.lower()} to activist investors, what's your strongest strategic argument?",
-            f"How does {company_name}'s approach create shareholder value differently than your top 3 competitors in {industry}?",
-            f"What would convince me to choose {company_name} as a strategic partner over established {industry} leaders?",
+            f"Looking at {company_name}'s long-term vision, what happens if the {industry} industry shifts completely?",
+            f"What's {company_name}'s sustainable competitive moat that competitors can't replicate?",
+            f"How does {company_name}'s approach create shareholder value differently than competitors?",
             f"Looking at {theme}, what's your exit strategy if this doesn't achieve market leadership?"
         ],
         'CFO': [
-            f"Walk me through {company_name}'s cash conversion cycle - how long before we see positive free cash flow?",
-            f"Your CAPEX assumptions for {company_name} - what if interest rates double and funding costs skyrocket?",
-            f"I need to see the unit economics: what's the contribution margin for {company_name}'s core revenue streams?",
-            f"How sensitive is {company_name}'s profitability to a 20% increase in your largest cost component?",
-            f"What's your debt-to-equity strategy, and how much dilution are shareholders facing with this {report_type.lower()}?",
-            f"Show me the working capital requirements - what happens if customer payment terms extend by 30 days?"
+            f"Walk me through {company_name}'s cash conversion cycle - when do we see positive cash flow?",
+            f"Your CAPEX assumptions - what if interest rates double and funding costs skyrocket?",
+            f"What's the contribution margin for {company_name}'s core revenue streams?",
+            f"How sensitive is profitability to a 20% increase in your largest cost component?"
         ],
         'CTO': [
-            f"What's {company_name}'s technical architecture - can it handle 10x user growth without rebuilding?",
-            f"Your technology stack choices - how do they compare to industry standards for security and compliance in {industry}?",
-            f"What's the migration path if your core technology becomes obsolete or gets deprecated?",
-            f"How are you handling data pipeline architecture and real-time processing for {company_name}'s operations?",
-            f"What's your API strategy and how does it support {company_name}'s ecosystem partnerships in {industry}?",
-            f"Your development velocity - what's preventing faster iteration cycles and continuous deployment?"
+            f"What's {company_name}'s technical architecture - can it handle 10x growth without rebuilding?",
+            f"How do your technology choices compare to industry standards in {industry}?",
+            f"What's the migration path if your core technology becomes obsolete?",
+            f"How does the tech infrastructure support international expansion?"
         ],
         'CMO': [
-            f"What's {company_name}'s customer acquisition cost vs lifetime value ratio, and how does it compare to {industry} benchmarks?",
-            f"Your brand positioning strategy - how are you differentiating from established players in consumer perception?",
-            f"What channels drive the highest quality leads for {company_name}, and what's your attribution model?",
-            f"How do you measure brand equity, and what metrics prove {company_name} is winning mindshare in {industry}?",
-            f"Your content strategy - how does it drive qualified prospects through the conversion funnel?",
-            f"What's {company_name}'s viral coefficient and organic growth rate from existing customers?"
+            f"What's {company_name}'s customer acquisition cost vs lifetime value ratio?",
+            f"How are you differentiating from established players in consumer perception?",
+            f"What channels drive the highest quality leads for {company_name}?",
+            f"How do you measure brand equity and prove you're winning mindshare?"
         ],
         'COO': [
-            f"What's {company_name}'s operational leverage - how does throughput scale as you add capacity?",
-            f"Your supply chain strategy - what happens if your primary supplier has a 6-month disruption?",
-            f"How do you maintain quality standards as {company_name} scales operations 5x in the {industry} market?",
-            f"What's your talent acquisition strategy - can you hire fast enough to meet growth targets?",
-            f"Your process automation roadmap - which manual operations get automated first and what's the ROI?",
-            f"How does {company_name}'s operational model handle seasonal demand fluctuations in {industry}?"
+            f"What's {company_name}'s operational leverage - how does throughput scale?",
+            f"Your supply chain - what happens if your primary supplier has a disruption?",
+            f"How do you maintain quality as {company_name} scales 5x in {industry}?",
+            f"What KPIs tell you when operations are breaking down before customers notice?"
         ]
     }
     
     questions = role_templates.get(executive_role, [])
-    
-    # Very light deduplication for templates - only avoid nearly identical questions
-    if previously_asked_questions:
-        filtered_questions = []
-        for question in questions:
-            is_unique = True
-            for prev_q in previously_asked_questions:
-                # Only filter if questions are very similar
-                q_words = set([w.lower() for w in question.split() if len(w) > 4])
-                prev_words = set([w.lower() for w in prev_q.split() if len(w) > 4])
-                overlap = len(q_words.intersection(prev_words))
-                if overlap >= 4:  # Increased threshold from 2 to 4
-                    is_unique = False
-                    break
-            if is_unique:
-                filtered_questions.append(question)
-        
-        return filtered_questions[:6] if filtered_questions else questions[:6]
-    
-    return questions[:6]
-
-def generate_template_questions(executive_role, company_name, industry, report_type, key_themes):
-    """Generate template-based questions (fallback) - LEGACY VERSION FOR COMPATIBILITY"""
-    return generate_role_specific_templates(executive_role, company_name, industry, report_type, key_themes, [])
+    return questions[:4]  # Return exactly 4 questions
 
 def get_executive_name(role):
     """Get executive name by role"""
@@ -424,33 +362,30 @@ def get_next_executive(selected_executives, conversation_history):
     return candidates[0] if candidates else selected_executives[0]
 
 def check_session_limit(session_data):
-    """Check if session has reached its limit - FIXED VERSION"""
+    """Check if session has reached its limit"""
     session_type = session_data.get('session_type', 'questions')
-    conversation_history = session_data.get('conversation_history', [])
-    session_start = session_data.get('session_start_time')
     current_question_count = session_data.get('current_question_count', 0)
     
     if session_type == 'questions':
         question_limit = int(session_data.get('question_limit', 10))
-        print(f"🔢 Question count: {current_question_count}/{question_limit}")  # Debug logging
         return current_question_count >= question_limit
     
-    elif session_type == 'time' and session_start:
-        time_limit = int(session_data.get('time_limit', 10))
-        start_time = datetime.fromisoformat(session_start)
-        elapsed = datetime.now() - start_time
-        elapsed_minutes = elapsed.total_seconds() / 60
-        print(f"⏰ Time elapsed: {elapsed_minutes:.1f}/{time_limit} minutes")  # Debug logging
-        return elapsed.total_seconds() >= (time_limit * 60)
+    elif session_type == 'time':
+        session_start = session_data.get('session_start_time')
+        if session_start:
+            time_limit = int(session_data.get('time_limit', 10))
+            start_time = datetime.fromisoformat(session_start)
+            elapsed = datetime.now() - start_time
+            return elapsed.total_seconds() >= (time_limit * 60)
     
     return False
 
 def generate_closing_message(company_name, report_type):
     """Generate a professional closing message from the CEO"""
     closing_messages = [
-        f"Thank you for presenting your {report_type.lower()} for {company_name}. You've given our executive team excellent insights to consider. Your strategic thinking is impressive, and we appreciate the thorough analysis.",
-        f"This has been a productive discussion about {company_name}. Your {report_type.lower()} demonstrates solid strategic planning, and the team has gained valuable perspectives from your presentation.",
-        f"Excellent work on your {report_type.lower()} for {company_name}. You've addressed our key concerns with thoughtful responses. The executive team will incorporate several of your insights into our strategic discussions."
+        f"Thank you for presenting your {report_type.lower()} for {company_name}. You've given our executive team excellent insights to consider.",
+        f"This has been a productive discussion about {company_name}. Your strategic thinking demonstrates solid planning.",
+        f"Excellent work on your {report_type.lower()} for {company_name}. The executive team appreciates your thorough analysis."
     ]
     return random.choice(closing_messages)
 
@@ -469,7 +404,7 @@ def generate_transcript(session_data):
     else:
         session_date = "Date not recorded"
     
-    ai_mode = "AI-Enhanced with Relaxed Deduplication" if openai_available else "Demo Mode"
+    ai_mode = "AI-Optimized Fast Generation" if openai_available else "Demo Mode"
     
     transcript = f"""
 AI EXECUTIVE PANEL SIMULATOR - {ai_mode}
@@ -481,7 +416,7 @@ Industry: {industry}
 Report Type: {report_type}
 Session Date: {session_date}
 Executives Present: {', '.join(selected_executives)}
-AI Enhancement: {'Enabled - Content-Driven Questions with Role-Specific Perspectives' if openai_available else 'Template-based'}
+AI Enhancement: {'Enabled - Fast Content-Driven Questions' if openai_available else 'Template-based'}
 
 ====================================
 PRESENTATION TRANSCRIPT
@@ -541,9 +476,6 @@ PRESENTATION TRANSCRIPT
     transcript += "====================================\n"
     transcript += f"Generated by AI Executive Panel Simulator ({ai_mode})\n"
     transcript += f"Total Questions Asked: {question_number - 1}\n"
-    transcript += f"Executives Participated: {len(selected_executives)}\n"
-    if openai_available:
-        transcript += f"AI Enhancement: OpenAI GPT-4o-mini with Content-Driven Role-Specific Questions\n"
     
     return transcript
 
@@ -578,17 +510,16 @@ def setup_session():
         if not report_content:
             return jsonify({'status': 'error', 'error': 'Could not extract text from PDF. Please ensure it\'s a text-based PDF.'})
         
-        # Enhanced AI-powered analysis with more content
+        # Fast AI analysis
         detailed_analysis = analyze_report_with_ai_robust(report_content, company_name, industry, report_type)
         
-        # Store MORE session data for better AI question generation
+        # Optimized session data storage
         session['company_name'] = company_name
         session['industry'] = industry
         session['report_type'] = report_type
         session['selected_executives'] = selected_executives
-        # INCREASED data storage for better AI questions
-        session['report_content'] = report_content[:2000]  # Increased from 800 to 2000
-        session['detailed_analysis'] = {'key_details': detailed_analysis.get('key_details', [])[:8]}  # Increased from 2 to 8
+        session['report_content'] = report_content[:1500]  # Reduced to 1500 for speed
+        session['detailed_analysis'] = {'key_details': detailed_analysis.get('key_details', [])[:6]}
         session['conversation_history'] = []
         session['session_type'] = session_type
         session['question_limit'] = question_limit
@@ -596,15 +527,14 @@ def setup_session():
         session['session_start_time'] = datetime.now().isoformat()
         session['current_question_count'] = 0
         
-        # Show what was extracted for debugging
         key_details = detailed_analysis.get("key_details", [])
         
         return jsonify({
             'status': 'success',
-            'message': f'Report analyzed successfully! Found {len(report_content)} characters of content. {"Enhanced AI content-driven questions with role perspectives" if openai_available else "Template-based"} questions generated.',
+            'message': f'Report analyzed! {"Fast AI-powered questions" if openai_available else "Template-based questions"} ready.',
             'executives': selected_executives,
             'ai_enabled': openai_available,
-            'key_details': key_details  # Show all details extracted
+            'key_details': key_details
         })
         
     except Exception as e:
@@ -628,17 +558,27 @@ def start_presentation():
         if not selected_executives:
             return jsonify({'status': 'error', 'error': 'No executives selected'})
         
-        # Generate AI-powered questions for all executives with RELAXED deduplication
+        # Generate questions SEQUENTIALLY to avoid timeouts - OPTIMIZED
         all_questions = {}
-        all_previous_questions = []  # Start with empty list for first generation
+        all_previous_questions = []
         
-        for exec_role in selected_executives:
-            questions = generate_ai_questions_robust_with_deduplication(
-                report_content, exec_role, company_name, industry, report_type, detailed_analysis, all_previous_questions
-            )
-            all_questions[exec_role] = questions
-            # Only add a few questions to previous list to allow overlap on themes
-            all_previous_questions.extend(questions[:2])  # Only add first 2 questions to avoid list
+        print(f"⚡ Generating questions for {len(selected_executives)} executives...")
+        
+        for i, exec_role in enumerate(selected_executives):
+            try:
+                questions = generate_ai_questions_optimized(
+                    report_content, exec_role, company_name, industry, report_type, detailed_analysis, all_previous_questions
+                )
+                all_questions[exec_role] = questions
+                all_previous_questions.extend(questions[:2])  # Add first 2 to avoid list
+                
+                print(f"✅ Questions generated for {exec_role} ({i+1}/{len(selected_executives)})")
+                
+            except Exception as e:
+                print(f"❌ Error generating questions for {exec_role}: {e}")
+                # Use templates as fallback
+                template_questions = generate_role_specific_templates(exec_role, company_name, industry, report_type, detailed_analysis.get("key_details", []), all_previous_questions)
+                all_questions[exec_role] = template_questions
         
         session['generated_questions'] = all_questions
         
@@ -654,7 +594,6 @@ def start_presentation():
                 'timestamp': datetime.now().isoformat()
             }
             
-            # Track first question
             session['current_question_count'] = 1
             
             conversation_history.append({
@@ -664,6 +603,8 @@ def start_presentation():
                 'timestamp': datetime.now().isoformat()
             })
             session['conversation_history'] = conversation_history
+            
+            print(f"🚀 Presentation started with {first_exec} question")
             
             return jsonify({
                 'status': 'success',
@@ -692,7 +633,7 @@ def respond_to_executive():
         generated_questions = session.get('generated_questions', {})
         current_question_count = session.get('current_question_count', 0)
         
-        # Add student response to conversation
+        # Add student response
         conversation_history.append({
             'type': 'response',
             'student_response': student_response,
@@ -701,14 +642,10 @@ def respond_to_executive():
         
         session['conversation_history'] = conversation_history
         
-        print(f"🔢 Question count: {current_question_count}")  # Debug logging
-        
-        # FIXED session limit check
+        # Check session limit
         if session.get('session_type', 'questions') == 'questions':
             question_limit = int(session.get('question_limit', 10))
             if current_question_count >= question_limit:
-                print(f"🏁 Session limit reached: {current_question_count}/{question_limit}")
-                
                 company_name = session.get('company_name', 'Your Company')
                 report_type = session.get('report_type', 'presentation')
                 closing_message = generate_closing_message(company_name, report_type)
@@ -737,59 +674,24 @@ def respond_to_executive():
                     'session_ending': True
                 })
         
-        # Select next executive and question
+        # Get next question
         next_executive = get_next_executive(selected_executives, conversation_history)
         next_questions = generated_questions.get(next_executive, [])
         
-        # RELAXED question selection - prioritize AI questions over templates
         if next_questions and len(next_questions) > 0:
-            # Use simple modulo cycling through available questions
+            # Simple cycling through available questions
             base_index = (current_question_count - 1) % len(next_questions)
             next_question = next_questions[base_index]
-            print(f"🎯 {next_executive} asked AI-generated question #{base_index+1}")
         else:
-            # Last resort fallbacks
-            role_specific_fallbacks = {
-                'CEO': [
-                    f"What's the biggest strategic risk to {session.get('company_name', 'your company')} that keeps you up at night?",
-                    f"If the {session.get('industry', 'market')} shifts dramatically, how does {session.get('company_name', 'your company')} pivot?",
-                    f"How does {session.get('company_name', 'your company')} create lasting competitive advantage?",
-                    f"What's your vision for {session.get('company_name', 'your company')} in 5 years?"
-                ],
-                'CFO': [
-                    f"Show me the specific financial metrics that prove {session.get('company_name', 'your company')} is succeeding.",
-                    f"What's the cash flow timeline, and when do we break even?",
-                    f"Walk me through the unit economics of your core business model.",
-                    f"How do you validate these financial assumptions for the {session.get('industry', 'market')}?"
-                ],
-                'CTO': [
-                    f"What's the technical architecture that supports {session.get('company_name', 'your company')}'s scaling?",
-                    f"How does your technology stack compare to {session.get('industry', 'industry')} standards?",
-                    f"What's your biggest technical risk, and how are you mitigating it?",
-                    f"How does the platform handle 10x growth without breaking?"
-                ],
-                'CMO': [
-                    f"How do you actually acquire customers in the {session.get('industry', 'market')}?",
-                    f"What makes {session.get('company_name', 'your company')} different from competitors in customer perception?",
-                    f"What's your customer acquisition cost vs lifetime value?",
-                    f"What channels drive your highest-quality leads?"
-                ],
-                'COO': [
-                    f"How do you actually execute this {session.get('report_type', 'strategy').lower()} operationally?",
-                    f"What are the operational bottlenecks as {session.get('company_name', 'your company')} scales?",
-                    f"How do you maintain quality while scaling operations?",
-                    f"What operational metrics tell you the system is working?"
-                ]
+            # Fallback questions
+            fallback_questions = {
+                'CEO': f"What's the biggest strategic risk to {session.get('company_name', 'your company')}?",
+                'CFO': f"Walk me through the financial metrics for {session.get('company_name', 'your company')}.",
+                'CTO': f"How does the technical architecture support {session.get('company_name', 'your company')}'s growth?",
+                'CMO': f"What's your customer acquisition strategy for {session.get('company_name', 'your company')}?",
+                'COO': f"How do you execute this strategy operationally at {session.get('company_name', 'your company')}?"
             }
-            
-            executive_fallbacks = role_specific_fallbacks.get(next_executive, [
-                f"Can you elaborate on your approach to {session.get('report_type', 'strategy').lower()}?",
-                f"What's the most critical success factor for {session.get('company_name', 'your company')}?"
-            ])
-            
-            fallback_index = (current_question_count) % len(executive_fallbacks)
-            next_question = executive_fallbacks[fallback_index]
-            print(f"🔄 {next_executive} using role-specific fallback #{fallback_index+1}")
+            next_question = fallback_questions.get(next_executive, f"Can you elaborate on your {session.get('report_type', 'strategy').lower()}?")
         
         # Update question count
         current_question_count += 1
@@ -863,7 +765,7 @@ def download_transcript():
         safe_company_name = "".join(c for c in company_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
         safe_company_name = safe_company_name.replace(' ', '_')
         
-        ai_suffix = "_AI_Enhanced_Role_Specific" if openai_available else "_Demo"
+        ai_suffix = "_AI_Fast_Optimized" if openai_available else "_Demo"
         filename = f"{safe_company_name}_Executive_Panel_Transcript{ai_suffix}_{session_date}.txt"
         
         response = Response(
@@ -885,25 +787,20 @@ def debug_ai():
         debug_info = {
             'openai_available': openai_available,
             'ai_timeout': AI_TIMEOUT,
+            'optimization': 'speed_optimized',
             'session_data': {
                 'company_name': session.get('company_name', 'NOT SET'),
                 'industry': session.get('industry', 'NOT SET'),
                 'report_type': session.get('report_type', 'NOT SET'),
                 'has_report_content': bool(session.get('report_content')),
                 'report_content_length': len(session.get('report_content', '')),
-                'report_content_preview': session.get('report_content', '')[:500] + '...' if session.get('report_content') else 'NO CONTENT',
-                'has_detailed_analysis': bool(session.get('detailed_analysis')),
                 'detailed_analysis': session.get('detailed_analysis', {}),
-                'has_generated_questions': bool(session.get('generated_questions')),
                 'current_question_count': session.get('current_question_count', 0),
                 'conversation_history_length': len(session.get('conversation_history', [])),
-                'generated_questions_sample': {
-                    exec: questions[:2] if questions else []  # Show first 2 questions per exec
+                'generated_questions_count': {
+                    exec: len(questions) if questions else 0
                     for exec, questions in session.get('generated_questions', {}).items()
-                },
-                'deduplication_relaxed': True,
-                'enhanced_analysis': True,
-                'role_specific_perspectives': True
+                }
             }
         }
         
@@ -912,7 +809,7 @@ def debug_ai():
     except Exception as e:
         return jsonify({'error': str(e)})
 
-# Logo serving route (updated for new logo)
+# Logo serving route
 @app.route('/MSB-UT-Logo.jpg')
 def serve_logo():
     """Serve the McCombs logo from the root directory"""
@@ -931,7 +828,7 @@ if __name__ == '__main__':
     
     print("🚀 AI Executive Panel Simulator Starting...")
     print(f"📁 Current directory: {os.getcwd()}")
-    print(f"🤖 AI Enhancement: {'Enabled - Enhanced Content-Driven Questions with Role-Specific Perspectives' if openai_available else 'Disabled (Demo Mode)'}")
+    print(f"⚡ AI Enhancement: {'Enabled - SPEED OPTIMIZED for Fast Generation' if openai_available else 'Disabled (Demo Mode)'}")
     print(f"🌐 Running on port: {port}")
     print("="*50)
     
