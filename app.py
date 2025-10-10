@@ -180,7 +180,7 @@ def generate_ai_questions_robust_with_deduplication(report_content, executive_ro
             'CEO': 'strategic vision, competitive positioning, and long-term market leadership',
             'CFO': 'financial analysis, capital structure, and quantitative risk assessment',
             'CTO': 'technical architecture, scalability engineering, and innovation systems',
-            'CMO': 'customer acquisition channels, brand differentiation, and market penetration',
+            'CMO': 'value proposition, customer loyalty, and market penetration',
             'COO': 'operational processes, supply chain optimization, and execution logistics'
         }
         
@@ -206,12 +206,12 @@ def generate_ai_questions_robust_with_deduplication(report_content, executive_ro
             if previous_topics:
                 avoid_guidance = f"\n\nIMPORTANT: Previous executives already asked about: {', '.join(set(previous_topics))}. Ask about DIFFERENT aspects from your {executive_role} perspective."
         
-        # Enhanced prompt for uniqueness
+        # Enhanced prompt for uniqueness - REMOVED company restrictions
         prompt_data = {
             'messages': [
                 {
                     "role": "system", 
-                    "content": f"You are a {executive_role} asking UNIQUE questions about {company_name} from your specific executive perspective. Reference ONLY their {report_type}. Never mention Tesla, Apple, or other companies. Focus on {focus} - areas other executives wouldn't typically ask about."
+                    "content": f"You are a {executive_role} asking UNIQUE questions about {company_name} from your specific executive perspective. Reference ONLY their {report_type}. You may mention competitors or industry examples when relevant. Focus on {focus} - areas other executives wouldn't typically ask about."
                 },
                 {
                     "role": "user", 
@@ -228,6 +228,7 @@ Generate exactly 5 UNIQUE questions that:
 2. Reference specific details from {company_name}'s {report_type}
 3. Ask about aspects OTHER executives wouldn't typically cover
 4. Start with "In your {report_type}..." or "Your analysis shows..."
+5. May reference competitors or industry benchmarks when relevant
 
 Format as numbered list:"""
                 }
@@ -239,9 +240,8 @@ Format as numbered list:"""
         response_text = call_openai_with_timeout(prompt_data, timeout=15)
         
         if response_text:
-            # Parse and validate questions
+            # Parse and validate questions - REMOVED forbidden terms
             questions = []
-            forbidden_terms = ['tesla', 'apple', 'google', 'amazon', 'microsoft', 'facebook', 'meta']
             
             for line in response_text.split('\n'):
                 line = line.strip()
@@ -250,8 +250,8 @@ Format as numbered list:"""
                     question = question.split(')', 1)[-1].strip()
                     question = question.lstrip('- •').strip()
                     
-                    if (len(question) > 30 and 
-                        not any(term in question.lower() for term in forbidden_terms)):
+                    # Only check for minimum length
+                    if len(question) > 30:
                         questions.append(question)
             
             # DEDUPLICATION CHECK: Compare with previous questions
@@ -926,7 +926,8 @@ def debug_ai():
                     exec: questions[:2] if questions else []  # Show first 2 questions per exec
                     for exec, questions in session.get('generated_questions', {}).items()
                 },
-                'anti_repetition_enabled': True
+                'anti_repetition_enabled': True,
+                'company_restrictions_removed': True
             }
         }
         
@@ -935,7 +936,7 @@ def debug_ai():
     except Exception as e:
         return jsonify({'error': str(e)})
 
-# Logo serving route (if logo is in root directory)
+# Logo serving route (updated for new logo)
 @app.route('/MSB-UT-Logo.jpg')
 def serve_logo():
     """Serve the McCombs logo from the root directory"""
@@ -954,7 +955,7 @@ if __name__ == '__main__':
     
     print("🚀 AI Executive Panel Simulator Starting...")
     print(f"📁 Current directory: {os.getcwd()}")
-    print(f"🤖 AI Enhancement: {'Enabled - Robust Content-Driven Questions with Smart Anti-Repetition' if openai_available else 'Disabled (Demo Mode)'}")
+    print(f"🤖 AI Enhancement: {'Enabled - Robust Content-Driven Questions with Smart Anti-Repetition & Competitor Mentions' if openai_available else 'Disabled (Demo Mode)'}")
     print(f"🌐 Running on port: {port}")
     print("="*50)
     
