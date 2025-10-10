@@ -263,7 +263,7 @@ Format as numbered list:"""
                     q_words = set(question.lower().split())
                     prev_words = set(prev_q.lower().split())
                     common_words = q_words.intersection(prev_words)
-                    # If >40% overlap in meaningful words, consider similar
+                    # If >60% overlap in meaningful words, consider similar
                     meaningful_common = [w for w in common_words if len(w) > 4]
                     if len(meaningful_common) >= 3:
                         print(f"🔄 Filtered similar question: {question[:50]}...")
@@ -311,7 +311,7 @@ def generate_role_specific_templates(executive_role, company_name, industry, rep
     role_templates = {
         'CEO': [
             f"Looking at {company_name}'s long-term vision, what happens if the {industry} industry paradigm shifts completely in 5 years?",
-            f"Your board will want to know: what's {company_name}'s sustainable competitive moat that competitors can't replicate?",
+            f"The board will want to know: what's {company_name}'s sustainable competitive moat that competitors can't replicate?",
             f"If you had to defend this {report_type.lower()} to activist investors, what's your strongest strategic argument?",
             f"How does {company_name}'s approach create shareholder value differently than your top 3 competitors in {industry}?",
             f"What would convince me to choose {company_name} as a strategic partner over established {industry} leaders?",
@@ -329,7 +329,7 @@ def generate_role_specific_templates(executive_role, company_name, industry, rep
         ],
         'CTO': [
             f"What's {company_name}'s technical architecture - can it handle 10x user growth without rebuilding?",
-            f"Your technology stack choices - how do they compare to industry standards for security and compliance in {industry}?",
+            f"How do you feel our security and compliance compare to industry standards in {industry}?",
             f"What's the migration path if your core technology becomes obsolete or gets deprecated?",
             f"How are you handling data pipeline architecture and real-time processing for {company_name}'s operations?",
             f"What's your API strategy and how does it support {company_name}'s ecosystem partnerships in {industry}?",
@@ -337,18 +337,18 @@ def generate_role_specific_templates(executive_role, company_name, industry, rep
             f"How does {company_name}'s tech infrastructure support international expansion and regulatory compliance?"
         ],
         'CMO': [
-            f"What's {company_name}'s customer acquisition cost vs lifetime value ratio, and how does it compare to {industry} benchmarks?",
-            f"Your brand positioning strategy - how are you differentiating from established players in consumer perception?",
-            f"What channels drive the highest quality leads for {company_name}, and what's your attribution model?",
-            f"How do you measure brand equity, and what metrics prove {company_name} is winning mindshare in {industry}?",
-            f"Your content strategy - how does it drive qualified prospects through the conversion funnel?",
-            f"What's {company_name}'s viral coefficient and organic growth rate from existing customers?",
-            f"How are you personalizing the customer experience across touchpoints for different {industry} segments?"
+            f"What's {company_name}'s customer lifetime value compare to {industry} benchmarks?",
+            f"Your brand positioning strategy - how are we differentiating from established players in consumer perception?",
+            f"What move by our competitors would have the biggest impact on our strategic position?",
+            f"What metrics prove {company_name} is winning mindshare in {industry}?",
+            f"How could we better communicate {company_name}'s core value proposition to key audience segments?",
+            f"What are the risks that your proposed initiatives would alienate our core customer base?",
+            f"How do we best personalize the customer experience across touchpoints for different segments of the {industry}?"
         ],
         'COO': [
             f"What's {company_name}'s operational leverage - how does throughput scale as you add capacity?",
             f"Your supply chain strategy - what happens if your primary supplier has a 6-month disruption?",
-            f"How do you maintain quality standards as {company_name} scales operations 5x in the {industry} market?",
+            f"How do you maintain quality standards as {company_name} scales operations in the {industry} market?",
             f"What's your talent acquisition strategy - can you hire fast enough to meet growth targets?",
             f"Your process automation roadmap - which manual operations get automated first and what's the ROI?",
             f"How does {company_name}'s operational model handle seasonal demand fluctuations in {industry}?",
@@ -368,7 +368,7 @@ def generate_role_specific_templates(executive_role, company_name, industry, rep
                 q_words = set([w.lower() for w in question.split() if len(w) > 4])
                 prev_words = set([w.lower() for w in prev_q.split() if len(w) > 4])
                 overlap = len(q_words.intersection(prev_words))
-                if overlap >= 2:  # If 2+ significant words overlap, skip
+                if overlap >= 3:  # If 2+ significant words overlap, skip
                     is_unique = False
                     break
             if is_unique:
