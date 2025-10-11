@@ -55,7 +55,7 @@ openai_client = None
 openai_available = False
 
 # Configuration for AI features - optimized for faster generation
-AI_TIMEOUT = 12
+AI_TIMEOUT = 15  # Increased from 12 for better analysis
 AI_MAX_RETRIES = 2
 AI_ENABLED = True
 
@@ -64,7 +64,7 @@ try:
     if api_key and AI_ENABLED:
         openai.api_key = api_key
         openai_available = True
-        print("✅ OpenAI API key found - AI-powered questions enabled with optimized timeouts")
+        print("✅ OpenAI API key found - AI-powered questions enabled with enhanced topic diversity")
     else:
         print("⚠️ AI disabled or no API key found - running in demo mode")
 except ImportError as e:
@@ -85,7 +85,7 @@ def call_openai_with_timeout(prompt_data, timeout=AI_TIMEOUT):
             response = openai.ChatCompletion.create(
                 model="gpt-4o-mini",
                 messages=prompt_data['messages'],
-                max_tokens=prompt_data.get('max_tokens', 600),
+                max_tokens=prompt_data.get('max_tokens', 800),
                 temperature=prompt_data.get('temperature', 0.3)
             )
             return response['choices'][0]['message']['content'].strip()
@@ -121,137 +121,258 @@ def extract_text_from_pdf(pdf_file):
         print(f"Error extracting PDF text: {e}")
         return ""
 
-def analyze_report_with_ai_robust(report_content, company_name, industry, report_type):
-    """Enhanced AI analysis - OPTIMIZED for faster generation"""
+def analyze_report_with_ai_comprehensive(report_content, company_name, industry, report_type):
+    """ENHANCED AI analysis for diverse topic coverage"""
     if not openai_available:
-        return {"key_details": [f"{company_name}'s strategy"]}
+        return generate_diverse_fallback_analysis(company_name, industry)
     
-    print(f"🤖 Starting FAST AI analysis for {company_name} in {industry}...")
+    print(f"🤖 Starting COMPREHENSIVE AI analysis for {company_name} in {industry}...")
     
     try:
+        # ENHANCED prompt for diverse topic extraction
         prompt_data = {
             'messages': [
                 {
                     "role": "system",
-                    "content": f"Extract 3-4 key details from this {report_type} that executives would question. Return concise JSON only."
+                    "content": f"""You are an expert business analyst. Extract 10-12 DIVERSE key details from this {report_type} covering different business areas. 
+
+REQUIRED CATEGORIES (aim for 2 items each):
+- Financial (revenue, costs, profitability, funding)
+- Market/Competition (positioning, competitors, market share)
+- Operations (processes, efficiency, scalability)
+- Technology (infrastructure, innovation, digital strategy)
+- Strategic (growth plans, expansion, partnerships)
+- Risks/Challenges (threats, weaknesses, uncertainties)
+
+Return ONLY JSON with diverse, specific details executives would question."""
                 },
                 {
                     "role": "user", 
                     "content": f"""Company: {company_name} | Industry: {industry}
 
-Report content (first 2000 chars):
-{report_content[:2000]}
+Report content (first 4000 chars for comprehensive analysis):
+{report_content[:4000]}
 
-Return JSON:
-{{"key_details": ["detail 1", "detail 2", "detail 3"]}}"""
+Extract 10-12 DIVERSE details across business functions:
+
+{{"key_details": [
+  "specific financial metric or projection",
+  "competitive positioning detail", 
+  "operational process or efficiency claim",
+  "technology infrastructure detail",
+  "growth strategy or expansion plan",
+  "identified risk or challenge",
+  "market opportunity or trend",
+  "partnership or alliance mention",
+  "customer segment or retention detail",
+  "innovation or R&D initiative",
+  "regulatory or compliance factor",
+  "sustainability or ESG element"
+]}}"""
                 }
             ],
-            'max_tokens': 200,
-            'temperature': 0.2
+            'max_tokens': 600,  # Increased for more comprehensive analysis
+            'temperature': 0.4  # Slightly higher for diversity
         }
         
-        response_text = call_openai_with_timeout(prompt_data, timeout=8)
+        response_text = call_openai_with_timeout(prompt_data, timeout=12)
         
         if response_text:
             try:
                 analysis = json.loads(response_text)
-                details = analysis.get("key_details", [])[:3]
-                print(f"✅ FAST AI analysis completed for {company_name} - extracted {len(details)} details")
+                details = analysis.get("key_details", [])[:12]  # Take up to 12 details
+                print(f"✅ COMPREHENSIVE AI analysis completed for {company_name} - extracted {len(details)} diverse details")
                 return {"key_details": details}
             except json.JSONDecodeError:
-                lines = [line.strip() for line in response_text.split('\n') if line.strip() and len(line.strip()) > 15]
-                details = [line.strip('- "[]') for line in lines[:3]]
+                # Parse as text if JSON fails
+                lines = [line.strip() for line in response_text.split('\n') if line.strip() and len(line.strip()) > 20]
+                details = [line.strip('- "[]').strip() for line in lines[:10]]
                 print(f"⚠️ AI response parsed as text for {company_name} - extracted {len(details)} details")
                 return {"key_details": details}
         else:
-            print(f"❌ AI analysis timed out for {company_name}, using fallback")
-            return {"key_details": [f"{company_name}'s strategic approach"]}
+            print(f"❌ AI analysis timed out for {company_name}, using diverse fallback")
+            return generate_diverse_fallback_analysis(company_name, industry)
             
     except Exception as e:
         print(f"❌ AI analysis failed for {company_name}: {e}")
-        return {"key_details": [f"{company_name}'s strategy"]}
+        return generate_diverse_fallback_analysis(company_name, industry)
 
-def generate_ai_questions_on_demand(report_content, executive_role, company_name, industry, report_type, key_details, question_number):
-    """Generate AI questions on-demand without storing - MEMORY EFFICIENT"""
+def generate_diverse_fallback_analysis(company_name, industry):
+    """Generate diverse fallback analysis when AI is unavailable"""
+    # Industry-specific diverse themes
+    industry_themes = {
+        'Music Streaming': [
+            f"{company_name}'s content licensing costs and royalty structure",
+            f"User acquisition and retention in competitive streaming market", 
+            f"Free vs premium tier conversion strategies",
+            f"Podcast content strategy and monetization",
+            f"International market expansion priorities",
+            f"Artist relationship management and platform exclusives",
+            f"Data analytics and personalized recommendation algorithms",
+            f"Competition with Apple Music and YouTube Music",
+            f"Social features and music discovery innovation",
+            f"Platform scalability and infrastructure costs"
+        ],
+        'Technology': [
+            f"{company_name}'s R&D investment and innovation pipeline",
+            f"Market positioning against key competitors",
+            f"Talent acquisition and retention strategy", 
+            f"Data security and privacy compliance",
+            f"Cloud infrastructure and scalability plans",
+            f"Customer acquisition cost vs lifetime value",
+            f"Partnership and ecosystem development",
+            f"International expansion and localization",
+            f"Emerging technology adoption strategy",
+            f"Intellectual property and competitive moats"
+        ]
+    }
+    
+    # Get industry-specific themes or use generic business themes
+    themes = industry_themes.get(industry, [
+        f"{company_name}'s revenue model and profitability projections",
+        f"Market opportunity and competitive landscape analysis",
+        f"Operational efficiency and scalability challenges",
+        f"Technology infrastructure and digital transformation",
+        f"Customer acquisition and retention strategies",
+        f"Financial risk management and funding requirements",
+        f"Strategic partnerships and alliance opportunities",
+        f"International expansion and market entry plans",
+        f"Innovation and product development priorities",
+        f"Regulatory compliance and policy considerations"
+    ])
+    
+    return {"key_details": themes[:10]}  # Return 10 diverse themes
+
+def generate_ai_questions_with_topic_diversity(report_content, executive_role, company_name, industry, report_type, all_key_details, used_topics, question_number):
+    """Generate AI questions with enforced topic diversity - NO REPEATS"""
     if not openai_available:
-        return generate_template_question(executive_role, company_name, question_number)
+        return generate_diverse_template_question(executive_role, company_name, all_key_details, used_topics, question_number)
     
     try:
-        role_focuses = {
-            'CEO': 'strategic vision',
-            'CFO': 'financial analysis', 
-            'CTO': 'technical architecture',
-            'CMO': 'market strategy',
-            'COO': 'operations'
+        # Select an unused topic for this question
+        available_topics = [detail for detail in all_key_details if detail not in used_topics]
+        
+        if not available_topics:
+            # All topics used, start over with different angles
+            selected_topic = random.choice(all_key_details)
+            angle_modifier = "alternative approach to" if question_number > len(all_key_details) else ""
+        else:
+            selected_topic = random.choice(available_topics)
+            angle_modifier = ""
+        
+        # Role-specific questioning approaches
+        role_approaches = {
+            'CEO': ['strategic vision', 'competitive positioning', 'stakeholder value', 'long-term viability', 'market leadership'],
+            'CFO': ['financial impact', 'cost structure', 'revenue model', 'risk assessment', 'capital allocation'],
+            'CTO': ['technical feasibility', 'scalability', 'innovation potential', 'infrastructure requirements', 'technology risks'],
+            'CMO': ['market opportunity', 'customer impact', 'brand positioning', 'go-to-market strategy', 'competitive differentiation'],
+            'COO': ['operational feasibility', 'execution plan', 'resource requirements', 'process optimization', 'delivery capabilities']
         }
         
-        focus = role_focuses.get(executive_role, 'strategic approach')
-        detail = key_details[0] if key_details else f"{company_name}'s approach"
+        approach = random.choice(role_approaches.get(executive_role, role_approaches['CEO']))
+        
+        # Diverse question starters
+        question_starters = [
+            "In your analysis of",
+            "Your plan shows",
+            "Looking at",
+            "How do you",
+            "What happens if",
+            "Why did you choose",
+            "What's your contingency for",
+            "How will you measure",
+            "What evidence supports",
+            "How do you prioritize"
+        ]
+        
+        starter = random.choice(question_starters)
         
         prompt_data = {
             'messages': [
                 {
                     "role": "system",
-                    "content": f"You are a {executive_role}. Ask 1 specific question about {detail} from your {focus} perspective."
+                    "content": f"You are a {executive_role}. Ask 1 specific question about this topic from your {approach} perspective. Be direct and challenging but professional."
                 },
                 {
                     "role": "user",
                     "content": f"""Company: {company_name} | Industry: {industry} | Question #{question_number}
 
-Key detail: {detail}
+Specific topic to address: {selected_topic}
 
-Generate 1 specific question about this detail that a {executive_role} would ask. Start with varied openings like "In your analysis...", "Your plan shows...", "How do you...", etc.
+Generate exactly 1 question that:
+1. Starts with "{starter}"
+2. Focuses specifically on: {selected_topic}
+3. Reflects {approach} concerns
+4. Is unique and specific to this topic
+{f"5. Takes an {angle_modifier} perspective" if angle_modifier else ""}
 
 Question:"""
                 }
             ],
-            'max_tokens': 150,
-            'temperature': 0.4
+            'max_tokens': 200,
+            'temperature': 0.6  # Higher for more variety
         }
         
-        response_text = call_openai_with_timeout(prompt_data, timeout=8)
+        response_text = call_openai_with_timeout(prompt_data, timeout=10)
         
         if response_text and len(response_text.strip()) > 20:
-            return response_text.strip()
+            # Clean up the response
+            question = response_text.strip()
+            if question.startswith('"') and question.endswith('"'):
+                question = question[1:-1]
+            
+            print(f"✅ Generated diverse {executive_role} question #{question_number} on topic: {selected_topic[:50]}...")
+            return question, selected_topic
         else:
-            return generate_template_question(executive_role, company_name, question_number)
+            print(f"⚠️ AI question generation failed for {executive_role}, using template")
+            return generate_diverse_template_question(executive_role, company_name, all_key_details, used_topics, question_number)
             
     except Exception as e:
-        print(f"❌ AI question generation failed for {executive_role}: {e}")
-        return generate_template_question(executive_role, company_name, question_number)
+        print(f"❌ AI question generation error for {executive_role}: {e}")
+        return generate_diverse_template_question(executive_role, company_name, all_key_details, used_topics, question_number)
 
-def generate_template_question(executive_role, company_name, question_number):
-    """Generate template questions as fallback"""
+def generate_diverse_template_question(executive_role, company_name, all_key_details, used_topics, question_number):
+    """Generate template questions with topic diversity enforcement"""
+    # Select unused topic
+    available_topics = [detail for detail in all_key_details if detail not in used_topics]
+    if available_topics:
+        selected_topic = random.choice(available_topics)
+    else:
+        selected_topic = random.choice(all_key_details) if all_key_details else f"{company_name}'s strategy"
+    
+    # Role-specific question templates
     templates = {
         'CEO': [
-            f"What's {company_name}'s sustainable competitive advantage?",
-            f"How does this strategy create long-term shareholder value?",
-            f"What's your contingency plan if market conditions change?"
+            f"How does {selected_topic} align with {company_name}'s long-term strategic vision?",
+            f"What's the competitive advantage from {selected_topic}?",
+            f"How do you justify the strategic priority of {selected_topic}?"
         ],
         'CFO': [
-            f"Walk me through {company_name}'s path to profitability.",
-            f"What's the cash flow timeline for this initiative?",
-            f"How sensitive are these projections to market volatility?"
+            f"What's the financial impact of {selected_topic} on {company_name}'s bottom line?",
+            f"How do you validate the ROI projections for {selected_topic}?",
+            f"What are the cost implications of {selected_topic}?"
         ],
         'CTO': [
-            f"How does {company_name}'s technical architecture support scale?",
-            f"What's your technology risk mitigation strategy?",
-            f"How do you stay ahead of technical debt as you grow?"
+            f"What technical infrastructure supports {selected_topic} at {company_name}?",
+            f"How does {selected_topic} scale with {company_name}'s growth?",
+            f"What are the technology risks associated with {selected_topic}?"
         ],
         'CMO': [
-            f"What's {company_name}'s customer acquisition strategy?",
-            f"How do you measure brand equity and market position?",
-            f"What's your retention strategy as the market matures?"
+            f"How does {selected_topic} differentiate {company_name} in the market?",
+            f"What's the customer impact of {selected_topic}?",
+            f"How do you measure market response to {selected_topic}?"
         ],
         'COO': [
-            f"How does {company_name} maintain quality while scaling?",
-            f"What operational metrics indicate performance issues?",
-            f"What's your supply chain risk management approach?"
+            f"What operational processes enable {selected_topic} at {company_name}?",
+            f"How do you execute {selected_topic} effectively?",
+            f"What resources does {selected_topic} require for implementation?"
         ]
     }
     
-    role_questions = templates.get(executive_role, templates['CEO'])
-    return role_questions[(question_number - 1) % len(role_questions)]
+    role_templates = templates.get(executive_role, templates['CEO'])
+    question = random.choice(role_templates)
+    
+    return question, selected_topic
 
 def get_executive_name(role):
     """Get executive name by role"""
@@ -271,9 +392,9 @@ def get_next_executive(selected_executives, question_count):
 def generate_closing_message(company_name, report_type):
     """Generate a professional closing message from the CEO"""
     closing_messages = [
-        f"Thank you for presenting your {report_type.lower()} for {company_name}. You've given our executive team excellent insights to consider.",
-        f"This has been a productive discussion about {company_name}. Your strategic thinking demonstrates solid planning.",
-        f"Excellent work on your {report_type.lower()} for {company_name}. The executive team appreciates your thorough analysis."
+        f"Thank you for presenting your {report_type.lower()} for {company_name}. You've given our executive team excellent insights to consider across diverse business areas.",
+        f"This has been a productive discussion covering multiple aspects of {company_name}'s strategy. Your comprehensive analysis demonstrates solid planning.",
+        f"Excellent work on your {report_type.lower()} for {company_name}. The executive team appreciates the breadth and depth of your strategic thinking."
     ]
     return random.choice(closing_messages)
 
@@ -287,7 +408,7 @@ def generate_transcript(session_data):
     questions = session_data.get('questions', [])
     
     session_date = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-    ai_mode = "AI-Optimized Lightweight" if openai_available else "Demo Mode"
+    ai_mode = "AI-Enhanced Topic Diversity" if openai_available else "Demo Mode"
     
     transcript = f"""
 AI EXECUTIVE PANEL SIMULATOR - {ai_mode}
@@ -299,7 +420,7 @@ Industry: {industry}
 Report Type: {report_type}
 Session Date: {session_date}
 Executives Present: {', '.join(selected_executives)}
-AI Enhancement: {'Enabled - On-Demand Generation' if openai_available else 'Template-based'}
+AI Enhancement: {'Enabled - Diverse Topic Coverage with No Repeats' if openai_available else 'Template-based'}
 
 ====================================
 PRESENTATION TRANSCRIPT
@@ -325,7 +446,7 @@ PRESENTATION TRANSCRIPT
     return transcript
 
 # ============================================================================
-# FLASK ROUTES (ULTRA-LIGHTWEIGHT SESSION APPROACH)
+# FLASK ROUTES (ENHANCED TOPIC DIVERSITY)
 # ============================================================================
 
 @app.route('/')
@@ -357,37 +478,37 @@ def setup_session():
         if not report_content:
             return jsonify({'status': 'error', 'error': 'Could not extract text from PDF. Please ensure it\'s a text-based PDF.'})
         
-        # Fast AI analysis
-        detailed_analysis = analyze_report_with_ai_robust(report_content, company_name, industry, report_type)
+        # ENHANCED comprehensive AI analysis
+        detailed_analysis = analyze_report_with_ai_comprehensive(report_content, company_name, industry, report_type)
         
-        # ULTRA-LIGHTWEIGHT session storage - only store essentials in memory
         session_data = {
             'company_name': company_name,
             'industry': industry,
             'report_type': report_type,
             'selected_executives': selected_executives,
-            'report_content': report_content,  # Store full content in memory, not cookies
+            'report_content': report_content,  # Store full content for diverse question generation
             'key_details': detailed_analysis.get('key_details', []),
             'session_type': session_type,
             'question_limit': question_limit,
             'time_limit': time_limit,
             'session_start_time': datetime.now().isoformat(),
             'current_question_count': 0,
-            'questions': [],  # Store questions asked
-            'responses': []   # Store responses given
+            'questions': [],
+            'responses': [],
+            'used_topics': []  # NEW: Track which topics have been used
         }
         
         store_session_data(session_data)
         
-        # Only store session ID in cookie (tiny size)
         print(f"📊 Cookie session size: {len(session.get('sid', ''))} bytes")
+        print(f"🎯 Extracted {len(detailed_analysis.get('key_details', []))} diverse topics for question variety")
         
         return jsonify({
             'status': 'success',
-            'message': f'Report analyzed! {"AI-powered on-demand questions" if openai_available else "Template-based questions"} ready.',
+            'message': f'Report analyzed! {"AI-powered diverse topic coverage" if openai_available else "Template-based questions"} ready.',
             'executives': selected_executives,
             'ai_enabled': openai_available,
-            'key_details': detailed_analysis.get('key_details', [])[:2]  # Return only 2 for display
+            'key_details': detailed_analysis.get('key_details', [])[:3]  # Show first 3 for display
         })
         
     except Exception as e:
@@ -406,15 +527,16 @@ def start_presentation():
         industry = session_data.get('industry', '')
         report_type = session_data.get('report_type', '')
         report_content = session_data.get('report_content', '')
-        key_details = session_data.get('key_details', [])
+        all_key_details = session_data.get('key_details', [])
+        used_topics = session_data.get('used_topics', [])
         
         if not selected_executives:
             return jsonify({'status': 'error', 'error': 'No executives selected'})
         
-        # Generate first question on-demand
-        first_exec = selected_executives[0]  # Start with first executive
-        first_question = generate_ai_questions_on_demand(
-            report_content, first_exec, company_name, industry, report_type, key_details, 1
+        # Generate first question with topic diversity
+        first_exec = selected_executives[0]
+        first_question, selected_topic = generate_ai_questions_with_topic_diversity(
+            report_content, first_exec, company_name, industry, report_type, all_key_details, used_topics, 1
         )
         
         question_data = {
@@ -428,9 +550,10 @@ def start_presentation():
         # Update session data
         session_data['current_question_count'] = 1
         session_data['questions'] = [question_data]
+        session_data['used_topics'] = [selected_topic]  # Track the topic used
         store_session_data(session_data)
         
-        print(f"🚀 Presentation started with {first_exec} question")
+        print(f"🚀 Presentation started with {first_exec} question on topic: {selected_topic[:50]}...")
         print(f"📊 Memory session size: {len(str(session_data))} bytes")
         
         return jsonify({
@@ -448,7 +571,6 @@ def respond_to_executive():
     try:
         data = request.get_json()
         student_response = data.get('response', '')
-        current_executive = data.get('executive_role', '')
         
         if not student_response:
             return jsonify({'status': 'error', 'error': 'Missing response'})
@@ -460,6 +582,8 @@ def respond_to_executive():
         selected_executives = session_data.get('selected_executives', [])
         current_question_count = session_data.get('current_question_count', 0)
         question_limit = session_data.get('question_limit', 10)
+        all_key_details = session_data.get('key_details', [])
+        used_topics = session_data.get('used_topics', [])
         
         # Add response to session data
         session_data['responses'].append(student_response)
@@ -491,35 +615,15 @@ def respond_to_executive():
                 'session_ending': True
             })
         
-        # CIRCUIT BREAKER: Check for repeated responses (simple check)
-        responses = session_data.get('responses', [])
-        if len(responses) >= 3 and responses[-1] == responses[-2] == responses[-3]:
-            company_name = session_data.get('company_name', 'Your Company')
-            closing_message = f"Thank you for your presentation. The session has ended."
-            
-            return jsonify({
-                'status': 'success',
-                'follow_up': {
-                    'executive': 'CEO',
-                    'name': get_executive_name('CEO'),
-                    'title': 'CEO', 
-                    'question': closing_message,
-                    'is_closing': True,
-                    'timestamp': datetime.now().isoformat()
-                },
-                'session_ending': True
-            })
-        
-        # Generate next question on-demand
+        # ENHANCED: Generate next question with topic diversity
         next_executive = get_next_executive(selected_executives, next_question_count)
         company_name = session_data.get('company_name', '')
         industry = session_data.get('industry', '')
         report_type = session_data.get('report_type', '')
         report_content = session_data.get('report_content', '')
-        key_details = session_data.get('key_details', [])
         
-        next_question = generate_ai_questions_on_demand(
-            report_content, next_executive, company_name, industry, report_type, key_details, next_question_count
+        next_question, selected_topic = generate_ai_questions_with_topic_diversity(
+            report_content, next_executive, company_name, industry, report_type, all_key_details, used_topics, next_question_count
         )
         
         follow_up = {
@@ -530,12 +634,14 @@ def respond_to_executive():
             'timestamp': datetime.now().isoformat()
         }
         
-        # Update session data
+        # Update session data with topic tracking
         session_data['current_question_count'] = next_question_count
         session_data['questions'].append(follow_up)
+        session_data['used_topics'].append(selected_topic)  # Track new topic
         store_session_data(session_data)
         
-        print(f"🎯 {next_executive} asking question #{next_question_count}")
+        print(f"🎯 {next_executive} asking question #{next_question_count} on NEW topic: {selected_topic[:50]}...")
+        print(f"📊 Topics used so far: {len(session_data['used_topics'])}/{len(all_key_details)}")
         print(f"📊 Memory session size: {len(str(session_data))} bytes")
         
         return jsonify({
@@ -556,10 +662,15 @@ def end_session():
         
         questions_asked = len(session_data.get('questions', []))
         responses_given = len(session_data.get('responses', []))
+        topics_covered = len(session_data.get('used_topics', []))
+        total_topics_available = len(session_data.get('key_details', []))
         
         summary = {
             'total_questions': questions_asked,
             'total_responses': responses_given,
+            'topics_covered': topics_covered,
+            'total_topics_available': total_topics_available,
+            'topic_coverage_percentage': round((topics_covered / max(total_topics_available, 1)) * 100, 1),
             'company_name': session_data.get('company_name', 'Your Company'),
             'presentation_topic': session_data.get('report_type', 'Business Plan'),
             'executives_involved': session_data.get('selected_executives', []),
@@ -591,7 +702,7 @@ def download_transcript():
         safe_company_name = "".join(c for c in company_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
         safe_company_name = safe_company_name.replace(' ', '_')
         
-        ai_suffix = "_AI_Lightweight" if openai_available else "_Demo"
+        ai_suffix = "_AI_TopicDiverse" if openai_available else "_Demo"
         filename = f"{safe_company_name}_Executive_Panel_Transcript{ai_suffix}_{session_date}.txt"
         
         response = Response(
@@ -608,7 +719,7 @@ def download_transcript():
 
 @app.route('/debug_ai', methods=['GET'])
 def debug_ai():
-    """Debug route to see session status"""
+    """Enhanced debug route to show topic coverage"""
     try:
         session_data = get_session_data()
         cookie_size = len(session.get('sid', ''))
@@ -616,7 +727,7 @@ def debug_ai():
         
         debug_info = {
             'openai_available': openai_available,
-            'session_approach': 'in_memory_lightweight',
+            'session_approach': 'enhanced_topic_diversity',
             'cookie_size_bytes': cookie_size,
             'memory_size_bytes': memory_size,
             'total_sessions_active': len(SESSIONS),
@@ -625,6 +736,10 @@ def debug_ai():
                 'current_question_count': session_data.get('current_question_count', 0) if session_data else 0,
                 'questions_stored': len(session_data.get('questions', [])) if session_data else 0,
                 'responses_stored': len(session_data.get('responses', [])) if session_data else 0,
+                'total_topics_available': len(session_data.get('key_details', [])) if session_data else 0,
+                'topics_used': len(session_data.get('used_topics', [])) if session_data else 0,
+                'topic_coverage_percent': round((len(session_data.get('used_topics', [])) / max(len(session_data.get('key_details', [])), 1)) * 100, 1) if session_data else 0,
+                'used_topics_preview': [topic[:50] + '...' for topic in session_data.get('used_topics', [])[-3:]] if session_data else []
             } if session_data else 'NO SESSION DATA'
         }
         
@@ -656,10 +771,11 @@ if __name__ == '__main__':
     
     print("🚀 AI Executive Panel Simulator Starting...")
     print(f"📁 Current directory: {os.getcwd()}")
-    print(f"⚡ AI Enhancement: {'Enabled - ON-DEMAND Generation (Ultra-Lightweight)' if openai_available else 'Disabled (Demo Mode)'}")
+    print(f"⚡ AI Enhancement: {'Enabled - DIVERSE TOPIC COVERAGE with No Repeats' if openai_available else 'Disabled (Demo Mode)'}")
     print(f"🌐 Running on port: {port}")
     print(f"💾 Session Storage: In-Memory (bypasses 4KB cookie limit)")
-    print(f"🛡️ All fixes applied: Limit check, Circuit breaker, Ultra-lightweight storage")
+    print(f"🎯 Topic Tracking: Enhanced diversity across 10-12 business areas")
+    print(f"🛡️ All fixes applied: Limit check, Circuit breaker, Topic diversity, Question uniqueness")
     print("="*50)
     
     app.run(debug=debug_mode, port=port, host='0.0.0.0')
