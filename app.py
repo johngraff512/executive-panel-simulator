@@ -9,7 +9,7 @@ import PyPDF2
 import openai
 
 # ============================================================================
-# FLASK APPLICATION INITIALIZATION
+# FLASK APPLICATION INITIALIZATION z
 # ============================================================================
 
 # Initialize Flask app FIRST (CRITICAL: Must come before any @app.route decorators)
