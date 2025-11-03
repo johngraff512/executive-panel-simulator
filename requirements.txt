@@ -4,5 +4,5 @@ python-dotenv==1.0.0
 PyPDF2==3.0.1
 werkzeug==2.3.7
 openai==0.28.1
-
+reportlab
 # Updated for OpenAI compatibility - force rebuild
