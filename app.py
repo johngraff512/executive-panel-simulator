@@ -606,10 +606,18 @@ def end_session():
         questions = session_data.get('questions', [])
         responses = session_data.get('responses', [])
         question_limit = session_data.get('question_limit', 10)
+        selected_executives = session_data.get('selected_executives', [])
         
         # Count audio vs text responses
         audio_count = sum(1 for r in responses if isinstance(r, dict) and r.get('type') == 'audio')
         text_count = len(responses) - audio_count
+        
+        # Get unique executives who asked questions
+        executives_involved = []
+        for q in questions:
+            exec_name = q.get('name', 'Unknown')
+            if exec_name not in executives_involved:
+                executives_involved.append(exec_name)
         
         summary = {
             'company_name': company_name,
@@ -619,7 +627,8 @@ def end_session():
             'total_questions': len(questions),
             'total_responses': len(responses),
             'audio_responses': audio_count,
-            'text_responses': text_count
+            'text_responses': text_count,
+            'executives_involved': executives_involved  # ✅ Added this field
         }
         
         return jsonify({
