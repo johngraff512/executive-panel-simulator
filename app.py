@@ -6,6 +6,8 @@ from flask import Flask, render_template, request, jsonify, session, Response
 from werkzeug.utils import secure_filename
 import PyPDF2
 import openai
+import pytz
+CST = pytz.timezone('America/Chicago')
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -90,6 +92,7 @@ def analyze_document_with_ai(document_text, company_name, industry, report_type)
 Extract 10-12 diverse key details that cover different business areas:
 - Financial aspects (revenue, costs, profitability)
 - Market and competition
+- Core resources, capabilities and competencies
 - Operations and processes
 - Technology and innovation
 - Strategic initiatives
@@ -342,7 +345,7 @@ def upload_report():
             'name': get_executive_name(first_executive),
             'title': first_executive,
             'question': first_question,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now(CST).isoformat()
         }
         
         # Store in memory
@@ -395,7 +398,7 @@ def respond_to_executive():
         session_data['responses'].append({
             'text': response_text,
             'type': 'text',
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now(CST).isoformat()
         })
         
         selected_executives = session_data.get('selected_executives', [])
@@ -420,7 +423,7 @@ def respond_to_executive():
                     'name': get_executive_name('CEO'),
                     'title': 'CEO',
                     'question': closing_message,
-                    'timestamp': datetime.now().isoformat(),  # ✅ ADD THIS LINE
+                    'timestamp': datetime.now(CST).isoformat(),  # ✅ ADD THIS LINE
                     'is_closing': True
                 },
                 'session_ending': True
@@ -447,7 +450,7 @@ def respond_to_executive():
             'name': get_executive_name(next_exec),
             'title': next_exec,
             'question': next_question,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now(CST).isoformat()
         }
         
         session_data['current_question_count'] = next_count
@@ -509,7 +512,7 @@ def respond_to_executive_audio():
         session_data['responses'].append({
             'text': transcription,
             'type': 'audio',
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now(CST).isoformat()
         })
         
         selected_executives = session_data.get('selected_executives', [])
@@ -538,7 +541,7 @@ def respond_to_executive_audio():
                     'name': get_executive_name('CEO'),
                     'title': 'CEO',
                     'question': closing_message,
-                    'timestamp': datetime.now().isoformat(),  # ✅ ADD THIS LINE
+                    'timestamp': datetime.now(CST).isoformat(),  # ✅ ADD THIS LINE
                     'is_closing': True
                 },
                 'session_ending': True
@@ -565,7 +568,7 @@ def respond_to_executive_audio():
             'name': get_executive_name(next_exec),
             'title': next_exec,
             'question': next_question,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now(CST).isoformat()
         }
         
         session_data['current_question_count'] = next_count
