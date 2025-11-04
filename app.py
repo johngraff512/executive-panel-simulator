@@ -397,8 +397,8 @@ def respond_to_executive():
         # Add response
         session_data['responses'].append({
             'text': response_text,
+            'timestamp': datetime.now(CST).isoformat(),
             'type': 'text',
-            'timestamp': datetime.now(CST).isoformat()
         })
         
         selected_executives = session_data.get('selected_executives', [])
@@ -512,7 +512,7 @@ def respond_to_executive_audio():
         session_data['responses'].append({
             'text': transcription,
             'type': 'audio',
-            'timestamp': datetime.now(CST).isoformat()
+            'timestamp': datetime.now(CST).isoformat(),
         })
         
         selected_executives = session_data.get('selected_executives', [])
