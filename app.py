@@ -49,15 +49,14 @@ def get_session_id():
     return session['sid']
 
 def get_session_data():
-    """Get session data from memory with deep copy"""
+    """Get session data from memory"""
     sid = get_session_id()
-    data = session_storage.get(sid)
-    return copy.deepcopy(data) if data else None  # ✅ Return deep copy
+    return session_storage.get(sid)
 
 def store_session_data(data):
-    """Store session data in memory with deep copy"""
+    """Store session data in memory"""
     sid = get_session_id()
-    session_storage[sid] = copy.deepcopy(data)  # ✅ Deep copy instead of reference
+    session_storage[sid] = data
     
 def clear_session_data():
     """Clear session data from memory"""
@@ -416,7 +415,6 @@ def respond_to_executive():
             closing_message = generate_closing_message(company_name, report_type)
             
             session_data['current_question_count'] = next_count
-            store_session_data(session_data)
             
             return jsonify({
                 'status': 'success',
@@ -530,7 +528,6 @@ def respond_to_executive_audio():
             closing_message = generate_closing_message(company_name, report_type)
             
             session_data['current_question_count'] = next_count
-            store_session_data(session_data)
             
             if os.path.exists(filepath):
                 os.remove(filepath)
