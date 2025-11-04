@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 import PyPDF2
 import openai
 import pytz
+import copy
 CST = pytz.timezone('America/Chicago')
 
 # Initialize Flask app
