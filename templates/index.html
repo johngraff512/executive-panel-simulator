@@ -823,7 +823,7 @@
                 try {
                     // Create FormData for file upload
                     const formData = new FormData();
-                    formData.append('report-pdf', fileInput.files[0]);
+                    formData.append('report', fileInput.files[0]);
                     formData.append('company-name', companyName);
                     formData.append('industry', industry);
                     formData.append('report-type', reportType);
@@ -833,7 +833,7 @@
                     
                     // Append selected executives
                     this.selectedExecutives.forEach(exec => {
-                        formData.append('executives', exec);
+                        formData.append('executives[]', exec);
                     });
                     
                     const response = await fetch('/upload_report', {
