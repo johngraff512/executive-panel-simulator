@@ -400,7 +400,6 @@ def respond_to_executive():
             'timestamp': datetime.now(CST).isoformat(),
             'type': 'text',
         })
-        store_session_data(session_data)  # ✅ ADD THIS LINE HERE!
         
         selected_executives = session_data.get('selected_executives', [])
         current_count = session_data.get('current_question_count', 0)
@@ -515,7 +514,6 @@ def respond_to_executive_audio():
             'type': 'audio',
             'timestamp': datetime.now(CST).isoformat(),
         })
-        store_session_data(session_data)  # ✅ ADD THIS LINE HERE!
         
         selected_executives = session_data.get('selected_executives', [])
         current_count = session_data.get('current_question_count', 0)
