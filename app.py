@@ -817,45 +817,45 @@ def download_transcript():
                 question_style
             ))
         
-        # User response
-        # User response - handle both string and dict formats
-        response_text = ''
-        response_mode = 'text'
-        response_timestamp = ''
+            # User response
+            # User response - handle both string and dict formats
+            response_text = ''
+            response_mode = 'text'
+            response_timestamp = ''
 
-        if isinstance(response, dict):
-            response_text = response.get('text', '')
-            response_mode = response.get('type', 'text') 
-            response_timestamp = response.get('timestamp', '')
-        elif isinstance(response, str):
-            response_text = response
+            if isinstance(response, dict):
+                response_text = response.get('text', '')
+                response_mode = response.get('type', 'text') 
+                response_timestamp = response.get('timestamp', '')
+            elif isinstance(response, str):
+                response_text = response
         
-        # Format response timestamp
-        if response_timestamp:
-            try:
-                dt = datetime.fromisoformat(response_timestamp.replace('Z', '+00:00'))
-                formatted_time = dt.strftime('%I:%M:%S %p')
-            except:
-                formatted_time = response_timestamp
+            # Format response timestamp
+            if response_timestamp:
+                try:
+                    dt = datetime.fromisoformat(response_timestamp.replace('Z', '+00:00'))
+                    formatted_time = dt.strftime('%I:%M:%S %p')
+                except:
+                    formatted_time = response_timestamp
             
-            story.append(Paragraph(
-                f"<i>{formatted_time}</i>",
-                timestamp_style
-            ))
+                story.append(Paragraph(
+                    f"<i>{formatted_time}</i>",
+                    timestamp_style
+                ))
         
-        # Indicate if audio response
-        if response_mode == 'audio':
-            story.append(Paragraph(
-                f"A: [Audio Response] {response_text}",
-                response_style
-            ))
-        else:
-            story.append(Paragraph(
-                f"A: {response_text}",
-                response_style
-            ))
+            # Indicate if audio response
+            if response_mode == 'audio':
+                story.append(Paragraph(
+                    f"A: [Audio Response] {response_text}",
+                    response_style
+                ))
+            else:
+                story.append(Paragraph(
+                    f"A: {response_text}",
+                    response_style
+                ))
         
-        story.append(Spacer(1, 0.1*inch))
+            story.append(Spacer(1, 0.1*inch))
         
         # Build PDF
         doc.build(story)
