@@ -51,6 +51,7 @@ def get_session_id():
 def get_session_data():
     """Get session data from memory"""
     sid = get_session_id()
+    print(f"DEBUG GET: Session ID = {sid}, Keys in storage = {list(session_storage.keys())}")
     return session_storage.get(sid)
 
 def store_session_data(data):
