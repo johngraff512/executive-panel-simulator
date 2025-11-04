@@ -824,11 +824,11 @@
                     // Create FormData for file upload
                     const formData = new FormData();
                     formData.append('report', fileInput.files[0]);
-                    formData.append('company-name', companyName);
+                    formData.append('company_name', companyName);
                     formData.append('industry', industry);
-                    formData.append('report-type', reportType);
-                    formData.append('session-type', sessionType);
-                    formData.append('question-limit', questionLimit);
+                    formData.append('report_type', reportType);
+                    formData.append('session_type', sessionType);
+                    formData.append('question_limit', questionLimit);
                     formData.append('time-limit', timeLimit);
                     
                     // Append selected executives
