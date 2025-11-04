@@ -48,14 +48,15 @@ def get_session_id():
     return session['sid']
 
 def get_session_data():
-    """Retrieve session data from memory"""
+    """Get session data from memory with deep copy"""
     sid = get_session_id()
-    return session_storage.get(sid, {})
+    data = session_storage.get(sid)
+    return copy.deepcopy(data) if data else None  # ✅ Return deep copy
 
 def store_session_data(data):
-    """Store session data in memory"""
+    """Store session data in memory with deep copy"""
     sid = get_session_id()
-    session_storage[sid] = data
+    session_storage[sid] = copy.deepcopy(data)  # ✅ Deep copy instead of reference
     
 def clear_session_data():
     """Clear session data from memory"""
