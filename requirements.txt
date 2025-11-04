@@ -5,3 +5,4 @@ PyPDF2==3.0.1
 werkzeug==2.3.7
 openai==1.40.0
 reportlab
+
