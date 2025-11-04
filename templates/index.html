@@ -836,7 +836,7 @@
                         formData.append('executives', exec);
                     });
                     
-                    const response = await fetch('/setup_session', {
+                    const response = await fetch('/upload_report', {
                         method: 'POST',
                         body: formData
                     });
@@ -927,7 +927,7 @@
                 this.showLoadingMessage('AI executives are analyzing your report and preparing personalized questions...');
                 
                 try {
-                    const response = await fetch('/start_presentation', {
+                    const response = await fetch('/upload_report', {
                         method: 'POST'
                     });
                     
