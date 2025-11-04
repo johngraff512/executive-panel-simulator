@@ -40,6 +40,7 @@ except Exception as e:
 
 # In-memory session storage (avoids cookie size issues)
 session_storage = {}
+responses_storage = {}  # Separate storage for responses
 
 def get_session_id():
     """Get or create a session ID for the current user"""
@@ -51,7 +52,6 @@ def get_session_id():
 def get_session_data():
     """Get session data from memory"""
     sid = get_session_id()
-    print(f"DEBUG GET: Session ID = {sid}, Keys in storage = {list(session_storage.keys())}")
     return session_storage.get(sid)
 
 def store_session_data(data):
@@ -396,8 +396,12 @@ def respond_to_executive():
         if not session_data:
             return jsonify({'status': 'error', 'error': 'Session data lost. Please restart.'})
         
-        # Add response
-        session_data['responses'].append({
+        # Add response to separate storage
+        sid = get_session_id()
+        if sid not in responses_storage:
+            responses_storage[sid] = []
+
+        responses_storage[sid].append({
             'text': response_text,
             'timestamp': datetime.now(CST).isoformat(),
             'type': 'text',
@@ -509,8 +513,12 @@ def respond_to_executive_audio():
                 os.remove(filepath)
             return jsonify({'status': 'error', 'error': 'Session data lost. Please restart.'})
         
-        # Add response
-        session_data['responses'].append({
+        # Add response to separate storage
+        sid = get_session_id()
+        if sid not in responses_storage:
+            responses_storage[sid] = []
+
+        responses_storage[sid].append({
             'text': transcription,
             'type': 'audio',
             'timestamp': datetime.now(CST).isoformat(),
@@ -609,7 +617,8 @@ def end_session():
         company_name = session_data.get('company_name', 'Your Company')
         report_type = session_data.get('report_type', 'Business Plan')
         questions = session_data.get('questions', [])
-        responses = session_data.get('responses', [])
+        sid = get_session_id()
+        responses = responses_storage.get(sid, [])
         question_limit = session_data.get('question_limit', 10)
         selected_executives = session_data.get('selected_executives', [])
         
@@ -668,7 +677,8 @@ def download_transcript():
         report_type = session_data.get('report_type', 'Business Plan')
         industry = session_data.get('industry', 'Technology')
         questions = session_data.get('questions', [])  # ← NEW
-        responses = session_data.get('responses', [])  # ← NEW
+        sid = get_session_id()
+        responses = responses_storage.get(sid, [])
         
         # Create PDF buffer
         buffer = BytesIO()
