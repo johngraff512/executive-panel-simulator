@@ -845,7 +845,7 @@
                         this.hideUploadProgress();
                         this.reportUploaded = true;
                         this.setupSimulationPhase();
-                        this.startPresentation();
+                        this.startPresentation(data.first_question);
                     } else {
                         throw new Error(data.error || 'Failed to setup session');
                     }
@@ -921,27 +921,18 @@
                 this.showPhase('simulation');
             }
             
-            async startPresentation() {
-                this.showLoadingMessage('AI executives are analyzing your report and preparing personalized questions...');
-                
-                try {
-                    const response = await fetch('/upload_report', {
-                        method: 'POST'
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.status === 'success') {
-                        this.hideLoadingMessage();
-                        this.displayInitialQuestions(data.initial_questions);
-                    } else {
-                        throw new Error(data.error || 'Failed to start presentation');
-                    }
-                } catch (error) {
-                    this.hideLoadingMessage();
-                    alert('Error starting presentation: ' + error.message);
-                }
-            }
+            startPresentation(firstQuestion) {
+    // Transition to presentation phase with the question already received
+    try {
+        if (firstQuestion) {
+            this.displayInitialQuestions([firstQuestion]);  // Pass as array
+        } else {
+            throw new Error('No question data received');
+        }
+    } catch (error) {
+        alert('Error starting presentation: ' + error.message);
+    }
+}
             
             displayInitialQuestions(questions) {
                 const conversationArea = document.getElementById('conversation-area');
