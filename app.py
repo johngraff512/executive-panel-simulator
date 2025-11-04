@@ -23,6 +23,7 @@ openai_available = False
 try:
     api_key = os.environ.get('OPENAI_API_KEY')
     if api_key:
+        # Simple initialization for openai >= 1.0.0
         openai_client = openai.OpenAI(api_key=api_key)
         openai_available = True
         print("✅ OpenAI API key found - AI-powered questions enabled")
@@ -30,6 +31,8 @@ try:
         print("⚠️  No OpenAI API key found - running in demo mode")
 except Exception as e:
     print(f"❌ OpenAI initialization failed: {e}")
+    import traceback
+    traceback.print_exc()  # This will help debug
     openai_available = False
 
 # In-memory session storage (avoids cookie size issues)
