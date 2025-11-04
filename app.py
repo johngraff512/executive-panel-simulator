@@ -808,14 +808,17 @@ def download_transcript():
             ))
         
         # User response
+        # User response - handle both string and dict formats
+        response_text = ''
+        response_mode = 'text'
+        response_timestamp = ''
+
         if isinstance(response, dict):
             response_text = response.get('text', '')
-            response_mode = response.get('type', 'text')
+            response_mode = response.get('type', 'text') 
             response_timestamp = response.get('timestamp', '')
-        else:
-            response_text = str(response)
-            response_mode = 'text'
-            response_timestamp = ''
+        elif isinstance(response, str):
+            response_text = response
         
         # Format response timestamp
         if response_timestamp:
