@@ -768,78 +768,78 @@ def download_transcript():
         
         # Process conversation history
         # Process Q&A pairs
-    for i, (question, response) in enumerate(zip(questions, responses), 1):
-    # Executive question
-    exec_name = question.get('name', 'Executive')
-    exec_title = question.get('title', '')
-    question_text = question.get('question', '')
-    timestamp = question.get('timestamp', '')
-    
-    # Format timestamp
-    if timestamp:
-        try:
-            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-            formatted_time = dt.strftime('%I:%M:%S %p')
-        except:
-            formatted_time = timestamp
-    else:
-        formatted_time = ''
-    
-    # Add executive name and title
-    story.append(Paragraph(
-        f"<b>{exec_name}</b> ({exec_title})",
-        exec_style
-    ))
-    
-    # Add timestamp
-    if formatted_time:
-        story.append(Paragraph(
-            f"<i>{formatted_time}</i>",
-            timestamp_style
-        ))
-    
-    # Add question
-    story.append(Paragraph(
-        f"Q: {question_text}",
-        question_style
-    ))
-    
-    # User response
-    if isinstance(response, dict):
-        response_text = response.get('text', '')
-        response_mode = response.get('type', 'text')
-        response_timestamp = response.get('timestamp', '')
-    else:
-        response_text = str(response)
-        response_mode = 'text'
-        response_timestamp = ''
-    
-    # Format response timestamp
-    if response_timestamp:
-        try:
-            dt = datetime.fromisoformat(response_timestamp.replace('Z', '+00:00'))
-            formatted_time = dt.strftime('%I:%M:%S %p')
-        except:
-            formatted_time = response_timestamp
+        for i, (question, response) in enumerate(zip(questions, responses), 1):
+            # Executive question
+            exec_name = question.get('name', 'Executive')
+            exec_title = question.get('title', '')
+            question_text = question.get('question', '')
+            timestamp = question.get('timestamp', '')
+            
+            # Format timestamp
+            if timestamp:
+                try:
+                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    formatted_time = dt.strftime('%I:%M:%S %p')
+                except:
+                    formatted_time = timestamp
+            else:
+                formatted_time = ''
+            
+            # Add executive name and title
+            story.append(Paragraph(
+                f"<b>{exec_name}</b> ({exec_title})",
+                exec_style
+            ))
+            
+            # Add timestamp
+            if formatted_time:
+                story.append(Paragraph(
+                    f"<i>{formatted_time}</i>",
+                    timestamp_style
+                ))
+            
+            # Add question
+            story.append(Paragraph(
+                f"Q: {question_text}",
+                question_style
+            ))
         
-        story.append(Paragraph(
-            f"<i>{formatted_time}</i>",
-            timestamp_style
-        ))
-    
-    # Indicate if audio response
-    if response_mode == 'audio':
-        story.append(Paragraph(
-            f"A: [Audio Response] {response_text}",
-            response_style
-        ))
-    else:
-        story.append(Paragraph(
-            f"A: {response_text}",
-            response_style
-        ))
-    
-    story.append(Spacer(1, 0.1*inch))
+        # User response
+        if isinstance(response, dict):
+            response_text = response.get('text', '')
+            response_mode = response.get('type', 'text')
+            response_timestamp = response.get('timestamp', '')
+        else:
+            response_text = str(response)
+            response_mode = 'text'
+            response_timestamp = ''
+        
+        # Format response timestamp
+        if response_timestamp:
+            try:
+                dt = datetime.fromisoformat(response_timestamp.replace('Z', '+00:00'))
+                formatted_time = dt.strftime('%I:%M:%S %p')
+            except:
+                formatted_time = response_timestamp
+            
+            story.append(Paragraph(
+                f"<i>{formatted_time}</i>",
+                timestamp_style
+            ))
+        
+        # Indicate if audio response
+        if response_mode == 'audio':
+            story.append(Paragraph(
+                f"A: [Audio Response] {response_text}",
+                response_style
+            ))
+        else:
+            story.append(Paragraph(
+                f"A: {response_text}",
+                response_style
+            ))
+        
+        story.append(Spacer(1, 0.1*inch))
         
         # Build PDF
         doc.build(story)
