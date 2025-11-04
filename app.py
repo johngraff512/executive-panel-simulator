@@ -5,11 +5,19 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, Response
 import PyPDF2
 import openai
+import tempfile
+from werkzeug.utils import secure_filename
+import shutil
 
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Audio extensions
+UPLOAD_FOLDER = tempfile.gettempdir()
+ALLOWED_AUDIO_EXTENSIONS = {'webm', 'mp3', 'wav', 'm4a', 'ogg'}
+app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # Increase to 25MB for audio files
 
 # Initialize OpenAI client
 openai_client = None
@@ -26,6 +34,34 @@ try:
 except Exception as e:
     print(f"❌ OpenAI initialization failed: {e}")
     openai_available = False
+
+# Audio functions
+def allowed_audio_file(filename):
+    """Check if uploaded file is an allowed audio format"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_AUDIO_EXTENSIONS
+
+def transcribe_audio_whisper(audio_file_path):
+    """Transcribe audio using OpenAI Whisper API"""
+    if not openai_available:
+        return "[Audio transcription unavailable - AI not enabled]"
+    
+    try:
+        print(f"🎤 Starting transcription of {audio_file_path}...")
+        
+        with open(audio_file_path, 'rb') as audio_file:
+            transcription = openai.Audio.transcribe(
+                model="whisper-1",
+                file=audio_file,
+                language="en",
+                response_format="text"
+            )
+        
+        print(f"✅ Transcription successful: {transcription[:100]}...")
+        return transcription
+        
+    except Exception as e:
+        print(f"❌ Transcription error: {e}")
+        return f"[Transcription failed: {str(e)}]"
 
 # PDF Processing Functions
 def extract_text_from_pdf(pdf_file):
@@ -325,20 +361,15 @@ def generate_closing_message(company_name, report_type):
 
 def generate_transcript(session_data):
     """Generate a formatted transcript of the executive panel session"""
-    conversation_history = session_data.get('conversation_history', [])
     company_name = session_data.get('company_name', 'Your Company')
     industry = session_data.get('industry', 'Technology')
     report_type = session_data.get('report_type', 'Business Plan')
     selected_executives = session_data.get('selected_executives', [])
-    session_start = session_data.get('session_start_time', '')
+    responses = session_data.get('responses', [])
+    questions = session_data.get('questions', [])
     
-    if session_start:
-        start_time = datetime.fromisoformat(session_start)
-        session_date = start_time.strftime("%B %d, %Y at %I:%M %p")
-    else:
-        session_date = "Date not recorded"
-    
-    ai_mode = "AI-Powered" if openai_available else "Demo Mode"
+    session_date = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+    ai_mode = "AI-Enhanced Topic Diversity" if openai_available else "Demo Mode"
     
     transcript = f"""
 AI EXECUTIVE PANEL SIMULATOR - {ai_mode}
@@ -350,69 +381,42 @@ Industry: {industry}
 Report Type: {report_type}
 Session Date: {session_date}
 Executives Present: {', '.join(selected_executives)}
-AI Enhancement: {'Enabled' if openai_available else 'Template-based'}
+AI Enhancement: {'Enabled - Diverse Topic Coverage with Audio Support' if openai_available else 'Template-based'}
 
 ====================================
 PRESENTATION TRANSCRIPT
 ====================================
 
 """
-    
-    question_number = 1
-    
-    for entry in conversation_history:
-        if entry.get('type') == 'question':
-            executive_name = get_executive_name(entry.get('executive', 'Executive'))
-            executive_role = entry.get('executive', 'Executive')
-            question = entry.get('question', 'Question not recorded')
-            timestamp = entry.get('timestamp', '')
-            
-            if timestamp:
-                time_str = datetime.fromisoformat(timestamp).strftime("%I:%M %p")
-            else:
-                time_str = "Time not recorded"
-            
-            transcript += f"QUESTION {question_number} [{time_str}]\n"
-            transcript += f"{executive_name} ({executive_role}):\n"
-            transcript += f"{question}\n\n"
-            
-        elif entry.get('type') == 'response':
-            student_response = entry.get('student_response', 'Response not recorded')
-            timestamp = entry.get('timestamp', '')
-            
-            if timestamp:
-                time_str = datetime.fromisoformat(timestamp).strftime("%I:%M %p")
-            else:
-                time_str = "Time not recorded"
-            
-            transcript += f"STUDENT RESPONSE [{time_str}]:\n"
-            transcript += f"{student_response}\n\n"
-            transcript += "-" * 50 + "\n\n"
-            question_number += 1
-            
-        elif entry.get('type') == 'closing':
-            executive_name = get_executive_name(entry.get('executive', 'CEO'))
-            executive_role = entry.get('executive', 'CEO')
-            closing_message = entry.get('message', 'Session ended')
-            timestamp = entry.get('timestamp', '')
-            
-            if timestamp:
-                time_str = datetime.fromisoformat(timestamp).strftime("%I:%M %p")
-            else:
-                time_str = "Time not recorded"
-            
-            transcript += f"SESSION CLOSING [{time_str}]\n"
-            transcript += f"{executive_name} ({executive_role}):\n"
-            transcript += f"{closing_message}\n\n"
+
+    for i, (question, response) in enumerate(zip(questions, responses), 1):
+        transcript += f"QUESTION {i}\n"
+        transcript += f"{question.get('name', 'Executive')} ({question.get('executive', 'Executive')}):\n"
+        transcript += f"{question.get('question', 'Question not recorded')}\n\n"
+        
+        transcript += f"STUDENT RESPONSE:\n"
+        
+        # Handle both string responses (text) and dict responses (audio)
+        if isinstance(response, dict):
+            transcript += f"{response.get('text', 'Response not recorded')}\n"
+            if response.get('type') == 'audio':
+                transcript += f"[Response provided via audio recording]\n"
+        else:
+            transcript += f"{response}\n"
+        
+        transcript += "\n" + "-" * 50 + "\n\n"
     
     transcript += "====================================\n"
     transcript += "END OF TRANSCRIPT\n"
     transcript += "====================================\n"
     transcript += f"Generated by AI Executive Panel Simulator ({ai_mode})\n"
-    transcript += f"Total Questions Asked: {question_number - 1}\n"
-    transcript += f"Executives Participated: {len(selected_executives)}\n"
-    if openai_available:
-        transcript += f"AI Enhancement: OpenAI GPT-4o-mini\n"
+    transcript += f"Total Questions Asked: {len(questions)}\n"
+    
+    # Count audio vs text responses
+    audio_count = sum(1 for r in responses if isinstance(r, dict) and r.get('type') == 'audio')
+    text_count = len(responses) - audio_count
+    if audio_count > 0:
+        transcript += f"Audio Responses: {audio_count} | Text Responses: {text_count}\n"
     
     return transcript
     
@@ -854,3 +858,140 @@ if __name__ == '__main__':
     print("="*50)
     
     app.run(debug=debug_mode, port=port, host='0.0.0.0')
+
+# Audio routes
+@app.route('/respond_to_executive_audio', methods=['POST'])
+def respond_to_executive_audio():
+    """Handle audio response submission with transcription"""
+    try:
+        # Check if audio file is present
+        if 'audio' not in request.files:
+            return jsonify({'status': 'error', 'error': 'No audio file provided'})
+        
+        audio_file = request.files['audio']
+        current_executive = request.form.get('executive_role', '')
+        
+        if audio_file.filename == '':
+            return jsonify({'status': 'error', 'error': 'No file selected'})
+        
+        # Validate file type
+        if not allowed_audio_file(audio_file.filename):
+            return jsonify({'status': 'error', 'error': 'Invalid audio file format. Please use webm, mp3, wav, m4a, or ogg.'})
+        
+        # Save audio file temporarily
+        filename = secure_filename(f"response_{datetime.now().strftime('%Y%m%d_%H%M%S')}.webm")
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        audio_file.save(filepath)
+        
+        print(f"📁 Audio file saved: {filepath} ({os.path.getsize(filepath)} bytes)")
+        
+        # Transcribe audio to text
+        transcription = transcribe_audio_whisper(filepath)
+        
+        if not transcription or transcription.startswith('['):
+            # Clean up and return error
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return jsonify({'status': 'error', 'error': 'Failed to transcribe audio. Please try again or use text input.'})
+        
+        # Get session data
+        session_data = get_session_data()
+        if not session_data:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return jsonify({'status': 'error', 'error': 'Session data lost. Please restart session.'})
+        
+        selected_executives = session_data.get('selected_executives', [])
+        current_question_count = session_data.get('current_question_count', 0)
+        question_limit = session_data.get('question_limit', 10)
+        all_key_details = session_data.get('key_details', [])
+        used_topics = session_data.get('used_topics', [])
+        
+        # Add response to session data (store as dict with transcription)
+        session_data['responses'].append({
+            'text': transcription,
+            'type': 'audio',
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        # Check limit BEFORE generating next question
+        next_question_count = current_question_count + 1
+        
+        if next_question_count > question_limit:
+            # End session
+            company_name = session_data.get('company_name', 'Your Company')
+            report_type = session_data.get('report_type', 'presentation')
+            closing_message = generate_closing_message(company_name, report_type)
+            
+            closing_question = {
+                'executive': 'CEO',
+                'name': get_executive_name('CEO'),
+                'title': 'CEO',
+                'question': closing_message,
+                'is_closing': True,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            session_data['current_question_count'] = next_question_count
+            store_session_data(session_data)
+            
+            # Clean up temp file
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            
+            return jsonify({
+                'status': 'success',
+                'transcription': transcription,
+                'follow_up': closing_question,
+                'session_ending': True
+            })
+        
+        # Generate next question
+        next_executive = get_next_executive(selected_executives, next_question_count)
+        company_name = session_data.get('company_name', '')
+        industry = session_data.get('industry', '')
+        report_type = session_data.get('report_type', '')
+        report_content = session_data.get('report_content', '')
+        
+        next_question, selected_topic = generate_ai_questions_with_topic_diversity(
+            report_content, next_executive, company_name, industry, report_type, 
+            all_key_details, used_topics, next_question_count
+        )
+        
+        follow_up = {
+            'executive': next_executive,
+            'name': get_executive_name(next_executive),
+            'title': next_executive,
+            'question': next_question,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Update session data
+        session_data['current_question_count'] = next_question_count
+        session_data['questions'].append(follow_up)
+        session_data['used_topics'].append(selected_topic)
+        store_session_data(session_data)
+        
+        # Clean up temp file
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        
+        print(f"🎯 {next_executive} asking question #{next_question_count}")
+        print(f"📊 Memory session size: {len(str(session_data))} bytes")
+        
+        return jsonify({
+            'status': 'success',
+            'transcription': transcription,
+            'follow_up': follow_up
+        })
+        
+    except Exception as e:
+        print(f"❌ Audio response error: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Clean up any temp files
+        if 'filepath' in locals() and os.path.exists(filepath):
+            os.remove(filepath)
+        
+        return jsonify({'status': 'error', 'error': f'Error processing audio: {str(e)}'})
