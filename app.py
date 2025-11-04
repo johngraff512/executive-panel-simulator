@@ -745,7 +745,7 @@ def download_transcript():
             ['Industry:', industry],
             ['Report Type:', report_type],
             ['Session Date:', datetime.now().strftime('%B %d, %Y')],
-            ['Questions:', str(len([c for c in conversation_history if c.get('type') == 'question']))]
+            ['Questions:', str(len(questions))]
         ]
         
         t = Table(session_data_table, colWidths=[2*inch, 4*inch])
