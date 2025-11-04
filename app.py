@@ -593,6 +593,46 @@ def respond_to_executive_audio():
         
         return jsonify({'status': 'error', 'error': f'Error processing audio: {str(e)}'})
 
+@app.route('/end_session', methods=['POST'])
+def end_session():
+    """End session and return summary data"""
+    try:
+        session_data = get_session_data()
+        if not session_data:
+            return jsonify({'status': 'error', 'error': 'No session data'})
+        
+        company_name = session_data.get('company_name', 'Your Company')
+        report_type = session_data.get('report_type', 'Business Plan')
+        questions = session_data.get('questions', [])
+        responses = session_data.get('responses', [])
+        question_limit = session_data.get('question_limit', 10)
+        
+        # Count audio vs text responses
+        audio_count = sum(1 for r in responses if isinstance(r, dict) and r.get('type') == 'audio')
+        text_count = len(responses) - audio_count
+        
+        summary = {
+            'company_name': company_name,
+            'presentation_topic': report_type,
+            'session_type': 'questions',
+            'session_limit': question_limit,
+            'total_questions': len(questions),
+            'total_responses': len(responses),
+            'audio_responses': audio_count,
+            'text_responses': text_count
+        }
+        
+        return jsonify({
+            'status': 'success',
+            'summary': summary
+        })
+        
+    except Exception as e:
+        print(f"End session error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': str(e)})
+
 @app.route('/download_transcript', methods=['GET'])
 def download_transcript():
     """Generate and download session transcript"""
