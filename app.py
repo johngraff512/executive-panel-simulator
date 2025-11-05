@@ -8,6 +8,7 @@ import PyPDF2
 import openai
 import pytz
 import copy
+import base64
 CST = pytz.timezone('America/Chicago')
 
 # Initialize Flask app
@@ -37,6 +38,42 @@ except Exception as e:
     import traceback
     traceback.print_exc()  # This will help debug
     openai_available = False
+
+def generate_tts_audio(text, executive_name):
+    """Generate TTS audio and return as base64 data URL"""
+    if not openai_available or not openai_client:
+        return None
+    
+    try:
+        # Map executive names to voices
+        voice_mapping = {
+            'Sarah Chen': 'nova',
+            'Michael Rodriguez': 'onyx',
+            'Dr. Lisa Wang': 'shimmer',
+            'James Thompson': 'fable',
+            'Rebecca Johnson': 'alloy'
+        }
+        voice = voice_mapping.get(executive_name, 'alloy')
+        
+        print(f"🎙️ Pre-generating TTS for {executive_name} with voice {voice}")
+        
+        # Generate TTS
+        tts_response = openai_client.audio.speech.create(
+            model="tts-1",
+            voice=voice,
+            input=text
+        )
+        
+        # Encode as base64 data URL
+        audio_data = base64.b64encode(tts_response.content).decode('utf-8')
+        tts_url = f"data:audio/mpeg;base64,{audio_data}"
+        
+        print(f"✅ TTS pre-generated ({len(audio_data)} bytes)")
+        return tts_url
+        
+    except Exception as e:
+        print(f"❌ TTS pre-generation failed: {e}")
+        return None
 
 # In-memory session storage (avoids cookie size issues)
 session_storage = {}
@@ -453,12 +490,18 @@ def respond_to_executive():
             next_count
         )
         
+        exec_name = get_executive_name(next_exec)
+        
+        # ✅ Pre-generate TTS audio
+        tts_url = generate_tts_audio(next_question, exec_name)
+        
         follow_up = {
             'executive': next_exec,
-            'name': get_executive_name(next_exec),
+            'name': exec_name,
             'title': next_exec,
             'question': next_question,
-            'timestamp': datetime.now(CST).isoformat()
+            'timestamp': datetime.now(CST).isoformat(),
+            'tts_url': tts_url  # ✅ Add TTS URL
         }
         
         session_data['current_question_count'] = next_count
@@ -574,12 +617,18 @@ def respond_to_executive_audio():
             next_count
         )
         
+        exec_name = get_executive_name(next_exec)
+        
+        # ✅ Pre-generate TTS audio
+        tts_url = generate_tts_audio(next_question, exec_name)
+        
         follow_up = {
             'executive': next_exec,
-            'name': get_executive_name(next_exec),
+            'name': exec_name,
             'title': next_exec,
             'question': next_question,
-            'timestamp': datetime.now(CST).isoformat()
+            'timestamp': datetime.now(CST).isoformat(),
+            'tts_url': tts_url  # ✅ Add TTS URL
         }
         
         session_data['current_question_count'] = next_count
