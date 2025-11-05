@@ -63,9 +63,9 @@ def generate_tts_audio(text, executive_name):
         def timeout_handler(signum, frame):
             raise TimeoutError("TTS generation timeout")
         
-        # Set 3-second timeout
+        # Set 2-second timeout
         signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(3)
+        signal.alarm(2)
         
         try:
             # Generate TTS
@@ -452,6 +452,18 @@ def respond_to_executive():
         session_data = get_session_data()
         if not session_data:
             return jsonify({'status': 'error', 'error': 'Session data lost. Please restart.'})
+
+        # ✅ ADD THIS CHECK:
+        current_count = session_data.get('current_question_count', 0)
+        question_limit = session_data.get('question_limit', 10)
+
+        if current_count >= question_limit:
+            print(f"⚠️ Session already complete ({current_count}/{question_limit})")
+            return jsonify({
+                'status': 'error',
+                'error': 'Session has ended',
+                'session_ended': True
+            })
         
         # Add response to separate storage
         sid = get_session_id()
@@ -575,6 +587,18 @@ def respond_to_executive_audio():
             if os.path.exists(filepath):
                 os.remove(filepath)
             return jsonify({'status': 'error', 'error': 'Session data lost. Please restart.'})
+
+        # ✅ ADD THIS CHECK:
+        current_count = session_data.get('current_question_count', 0)
+        question_limit = session_data.get('question_limit', 10)
+
+        if current_count >= question_limit:
+            print(f"⚠️ Session already complete ({current_count}/{question_limit})")
+            return jsonify({
+                'status': 'error',
+                'error': 'Session has ended',
+                'session_ended': True
+            })
         
         # Add response to separate storage
         sid = get_session_id()
@@ -636,9 +660,7 @@ def respond_to_executive_audio():
         
         exec_name = get_executive_name(next_exec)
         
-        # ✅ Skip TTS for audio responses (faster processing)
-        # tts_url = generate_tts_audio(next_question, exec_name)
-        tts_url = None  # Frontend will generate on-demand if needed
+        tts_url = generate_tts_audio(next_question, exec_name)
         
         follow_up = {
             'executive': next_exec,
