@@ -1270,11 +1270,21 @@
                     console.log('TTS is disabled');
                     return;
                 }
-        
+    
                 try {
+                    // ✅ CHECK IF AUDIO IS PRE-GENERATED (instant playback!)
+                    if (question.tts_url) {
+                        console.log('🎙️ Playing pre-generated TTS');
+                        this.audioElement.src = question.tts_url;
+                        await this.audioElement.play();
+                        console.log('✅ Audio playing (instant)');
+                        return;
+                    }
+        
+                    // Fallback: Generate on-demand (if pre-generation failed)
                     const voice = this.executiveVoices[question.name] || 'alloy';
-                    console.log(`🎙️ Speaking question from ${question.name} with voice: ${voice}`);
-            
+                    console.log(`🎙️ Generating TTS on-demand for ${question.name}`);
+        
                     const response = await fetch('/generate_tts', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -1283,17 +1293,16 @@
                             voice: voice
                         })
                     });
-            
+        
                     if (response.ok) {
                         const audioBlob = await response.blob();
                         const audioUrl = URL.createObjectURL(audioBlob);
-                
+            
                         this.audioElement.src = audioUrl;
                         await this.audioElement.play();
-                        console.log('✅ Audio playing');
+                        console.log('✅ Audio playing (on-demand)');
                     } else {
-                        const error = await response.json();
-                        console.error('TTS generation failed:', error);
+                        console.error('TTS generation failed');
                     }
                 } catch (error) {
                     console.error('TTS error:', error);
