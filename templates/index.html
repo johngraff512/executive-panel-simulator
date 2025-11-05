@@ -305,6 +305,16 @@
             padding: 2rem 0;
             border-top: 1px solid #dee2e6;
         }
+        <!-- ✅ ADD THIS SECTION HERE: -->
+        <div class="d-flex justify-content-end mb-2">
+            <button 
+                id="toggleTTS" 
+                class="btn btn-sm btn-outline-primary"
+                onclick="window.simulator.toggleTTS()"
+                title="Toggle Text-to-Speech">
+                <i class="fas fa-volume-up"></i> TTS: ON
+            </button>
+        </div>
     </style>
 </head>
 <body>
@@ -560,6 +570,17 @@
             🎤 Record Response
         </button>
     </div>
+                                
+    <!-- ✅ ADD THIS SECTION HERE: -->
+    <div class="d-flex justify-content-end mb-2">
+        <button 
+            id="toggleTTS" 
+            class="btn btn-sm btn-outline-primary"
+            onclick="window.simulator.toggleTTS()"
+            title="Toggle Text-to-Speech">
+            <i class="fas fa-volume-up"></i> TTS: ON
+        </button>
+    </div>
 
     <!-- Text Response Section (Default) -->
     <div id="textResponseSection">
@@ -686,6 +707,27 @@
                 this.reportUploaded = false;
                 this.sessionEnding = false;
                 this.init();
+                // ✅ ADD THESE NEW PROPERTIES:
+                // Voice mapping for each executive (personalized voices)
+                this.executiveVoices = {
+                    'Sarah Chen': 'nova',      // Female, warm and engaging
+                    'Michael Rodriguez': 'onyx', // Male, deep and authoritative
+                    'Rebecca Johnson': 'shimmer', // Female, soft and clear
+                    'David Kim': 'fable',        // Male, expressive
+                    'Jennifer Martinez': 'alloy'  // Female, balanced
+                };
+    
+                this.audioElement = new Audio();
+                this.ttsEnabled = true; // TTS on by default
+    
+                // Audio event listeners
+                this.audioElement.addEventListener('ended', () => {
+                    console.log('Audio playback ended');
+                });
+    
+                this.audioElement.addEventListener('error', (e) => {
+                    console.error('Audio playback error:', e);
+                });
             }
             
             init() {
@@ -989,6 +1031,8 @@
                 conversationArea.appendChild(messageElement);
                 this.scrollToBottom();
                 this.setActiveExecutive(questionData.executive);
+                // ✅ ADD THIS LINE:
+                this.speakQuestion(questionData);
             }
             
             addStudentMessage(response) {
@@ -1219,6 +1263,60 @@
             scrollToBottom() {
                 const conversationArea = document.getElementById('conversation-area');
                 conversationArea.scrollTop = conversationArea.scrollHeight;
+            }
+            // ✅ ADD THESE TWO NEW METHODS HERE:
+            async speakQuestion(question) {
+                if (!this.ttsEnabled) {
+                    console.log('TTS is disabled');
+                    return;
+                }
+        
+                try {
+                    const voice = this.executiveVoices[question.name] || 'alloy';
+                    console.log(`🎙️ Speaking question from ${question.name} with voice: ${voice}`);
+            
+                    const response = await fetch('/generate_tts', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            text: question.question,
+                            voice: voice
+                        })
+                    });
+            
+                    if (response.ok) {
+                        const audioBlob = await response.blob();
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                
+                        this.audioElement.src = audioUrl;
+                        await this.audioElement.play();
+                        console.log('✅ Audio playing');
+                    } else {
+                        const error = await response.json();
+                        console.error('TTS generation failed:', error);
+                    }
+                } catch (error) {
+                    console.error('TTS error:', error);
+                }
+            }
+    
+            toggleTTS() {
+                this.ttsEnabled = !this.ttsEnabled;
+                const button = document.getElementById('toggleTTS');
+                if (button) {
+                    if (this.ttsEnabled) {
+                        button.innerHTML = '<i class="fas fa-volume-up"></i> TTS: ON';
+                        button.classList.remove('btn-outline-secondary');
+                        button.classList.add('btn-outline-primary');
+                    } else {
+                        button.innerHTML = '<i class="fas fa-volume-mute"></i> TTS: OFF';
+                        button.classList.remove('btn-outline-primary');
+                        button.classList.add('btn-outline-secondary');
+                        this.audioElement.pause();
+                        this.audioElement.src = '';
+                    }
+                }
+                console.log('TTS toggled:', this.ttsEnabled ? 'ON' : 'OFF');
             }
         }
 
