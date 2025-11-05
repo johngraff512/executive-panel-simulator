@@ -107,13 +107,21 @@ class AudioRecorder {
             if (result.status === 'success') {
                 // Display transcription
                 this.displayTranscription(result.transcription);
-
-                // Display next question or closing
-                if (result.session_ending) {
-                    this.displayClosingMessage(result.follow_up);
-                } else {
-                    this.displayNextQuestion(result.follow_up);
+    
+                // ✅ ADD: Show transcription as student message in chat
+                if (window.simulator && window.simulator.addStudentMessage) {
+                    window.simulator.addStudentMessage(result.transcription + ' [Audio]');
                 }
+    
+                // ✅ ADD: Wait a moment before showing next question
+                setTimeout(() => {
+                    // Display next question or closing
+                    if (result.session_ending) {
+                        this.displayClosingMessage(result.follow_up);
+                    } else {
+                        this.displayNextQuestion(result.follow_up);
+                    }
+                }, 1000);
             } else {
                 alert('Error processing audio: ' + result.error);
                 this.hideProcessingIndicator();
