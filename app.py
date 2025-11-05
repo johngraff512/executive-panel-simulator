@@ -443,29 +443,19 @@ def upload_report():
 def respond_to_executive():
     """Handle student text response"""
     try:
+        # ========== STEP 1: Validate text response ==========
         data = request.get_json()
         response_text = data.get('response', '').strip()
         
         if not response_text:
             return jsonify({'status': 'error', 'error': 'Please provide a response'})
         
+        # ========== STEP 2: Get session data ==========
         session_data = get_session_data()
         if not session_data:
             return jsonify({'status': 'error', 'error': 'Session data lost. Please restart.'})
-
-        # ✅ ADD THIS CHECK:
-        current_count = session_data.get('current_question_count', 0)
-        question_limit = session_data.get('question_limit', 10)
-
-        if current_count >= question_limit:
-            print(f"⚠️ Session already complete ({current_count}/{question_limit})")
-            return jsonify({
-                'status': 'error',
-                'error': 'Session has ended',
-                'session_ended': True
-            })
         
-        # Add response to separate storage
+        # ========== STEP 3: Store the response FIRST ==========
         sid = get_session_id()
         if sid not in responses_storage:
             responses_storage[sid] = []
@@ -476,19 +466,28 @@ def respond_to_executive():
             'type': 'text',
         })
         
-        selected_executives = session_data.get('selected_executives', [])
+        print(f"📊 Storing response for question {session_data.get('current_question_count', 0)}")
+        
+        # ========== STEP 4: Check session progress ==========
         current_count = session_data.get('current_question_count', 0)
         question_limit = session_data.get('question_limit', 10)
+        selected_executives = session_data.get('selected_executives', [])
         
         next_count = current_count + 1
         
-        # Check if session should end
+        # ========== STEP 5: Check if session should end ==========
         if next_count > question_limit:
+            print(f"✅ Session complete ({current_count}/{question_limit}), sending closing message")
+            
             company_name = session_data.get('company_name', 'Your Company')
             report_type = session_data.get('report_type', 'presentation')
             closing_message = generate_closing_message(company_name, report_type)
             
+            # Pre-generate TTS for closing message
+            tts_url = generate_tts_audio(closing_message, "Sarah Chen")
+            
             session_data['current_question_count'] = next_count
+            store_session_data(session_data)
             
             return jsonify({
                 'status': 'success',
@@ -497,13 +496,14 @@ def respond_to_executive():
                     'name': get_executive_name('CEO'),
                     'title': 'CEO',
                     'question': closing_message,
-                    'timestamp': datetime.now(CST).isoformat(),  # ✅ ADD THIS LINE
-                    'is_closing': True
+                    'timestamp': datetime.now(CST).isoformat(),
+                    'is_closing': True,
+                    'tts_url': tts_url
                 },
                 'session_ending': True
             })
         
-        # Generate next question
+        # ========== STEP 6: Generate next question ==========
         next_exec = get_next_executive(selected_executives, next_count)
         key_details = session_data.get('key_details', [])
         used_topics = session_data.get('used_topics', [])
@@ -521,7 +521,7 @@ def respond_to_executive():
         
         exec_name = get_executive_name(next_exec)
         
-        # ✅ Pre-generate TTS audio
+        # Pre-generate TTS for next question
         tts_url = generate_tts_audio(next_question, exec_name)
         
         follow_up = {
@@ -530,9 +530,10 @@ def respond_to_executive():
             'title': next_exec,
             'question': next_question,
             'timestamp': datetime.now(CST).isoformat(),
-            'tts_url': tts_url  # ✅ Add TTS URL
+            'tts_url': tts_url
         }
         
+        # ========== STEP 7: Update session and store ==========
         session_data['current_question_count'] = next_count
         session_data['questions'].append(follow_up)
         session_data['used_topics'].append(next_topic)
@@ -540,6 +541,7 @@ def respond_to_executive():
         
         print(f"🎯 {next_exec} asking question #{next_count}")
         
+        # ========== STEP 8: Return response ==========
         return jsonify({
             'status': 'success',
             'follow_up': follow_up
@@ -555,6 +557,7 @@ def respond_to_executive():
 def respond_to_executive_audio():
     """Handle audio response with transcription"""
     try:
+        # ========== STEP 1: Validate audio file ==========
         if 'audio' not in request.files:
             return jsonify({'status': 'error', 'error': 'No audio file provided'})
         
@@ -573,7 +576,7 @@ def respond_to_executive_audio():
         
         print(f"📁 Audio file saved: {filepath} ({os.path.getsize(filepath)} bytes)")
         
-        # Transcribe audio
+        # ========== STEP 2: Transcribe audio ==========
         transcription = transcribe_audio_whisper(filepath)
         
         if not transcription or transcription.startswith('['):
@@ -581,26 +584,14 @@ def respond_to_executive_audio():
                 os.remove(filepath)
             return jsonify({'status': 'error', 'error': 'Failed to transcribe audio'})
         
-        # Get session data
+        # ========== STEP 3: Get session data ==========
         session_data = get_session_data()
         if not session_data:
             if os.path.exists(filepath):
                 os.remove(filepath)
             return jsonify({'status': 'error', 'error': 'Session data lost. Please restart.'})
-
-        # ✅ ADD THIS CHECK:
-        current_count = session_data.get('current_question_count', 0)
-        question_limit = session_data.get('question_limit', 10)
-
-        if current_count >= question_limit:
-            print(f"⚠️ Session already complete ({current_count}/{question_limit})")
-            return jsonify({
-                'status': 'error',
-                'error': 'Session has ended',
-                'session_ended': True
-            })
         
-        # Add response to separate storage
+        # ========== STEP 4: Store the response FIRST ==========
         sid = get_session_id()
         if sid not in responses_storage:
             responses_storage[sid] = []
@@ -611,20 +602,30 @@ def respond_to_executive_audio():
             'timestamp': datetime.now(CST).isoformat(),
         })
         
-        selected_executives = session_data.get('selected_executives', [])
+        print(f"📊 Storing response for question {session_data.get('current_question_count', 0)}")
+        
+        # ========== STEP 5: Check session progress ==========
         current_count = session_data.get('current_question_count', 0)
         question_limit = session_data.get('question_limit', 10)
+        selected_executives = session_data.get('selected_executives', [])
         
         next_count = current_count + 1
         
-        # Check if session should end
+        # ========== STEP 6: Check if session should end ==========
         if next_count > question_limit:
+            print(f"✅ Session complete ({current_count}/{question_limit}), sending closing message")
+            
             company_name = session_data.get('company_name', 'Your Company')
             report_type = session_data.get('report_type', 'presentation')
             closing_message = generate_closing_message(company_name, report_type)
             
-            session_data['current_question_count'] = next_count
+            # Pre-generate TTS for closing message
+            tts_url = generate_tts_audio(closing_message, "Sarah Chen")
             
+            session_data['current_question_count'] = next_count
+            store_session_data(session_data)
+            
+            # Clean up temp file
             if os.path.exists(filepath):
                 os.remove(filepath)
             
@@ -636,13 +637,14 @@ def respond_to_executive_audio():
                     'name': get_executive_name('CEO'),
                     'title': 'CEO',
                     'question': closing_message,
-                    'timestamp': datetime.now(CST).isoformat(),  # ✅ ADD THIS LINE
-                    'is_closing': True
+                    'timestamp': datetime.now(CST).isoformat(),
+                    'is_closing': True,
+                    'tts_url': tts_url
                 },
                 'session_ending': True
             })
         
-        # Generate next question
+        # ========== STEP 7: Generate next question ==========
         next_exec = get_next_executive(selected_executives, next_count)
         key_details = session_data.get('key_details', [])
         used_topics = session_data.get('used_topics', [])
@@ -660,6 +662,7 @@ def respond_to_executive_audio():
         
         exec_name = get_executive_name(next_exec)
         
+        # Pre-generate TTS for next question
         tts_url = generate_tts_audio(next_question, exec_name)
         
         follow_up = {
@@ -668,9 +671,10 @@ def respond_to_executive_audio():
             'title': next_exec,
             'question': next_question,
             'timestamp': datetime.now(CST).isoformat(),
-            'tts_url': tts_url  # ✅ Add TTS URL
+            'tts_url': tts_url
         }
         
+        # ========== STEP 8: Update session and store ==========
         session_data['current_question_count'] = next_count
         session_data['questions'].append(follow_up)
         session_data['used_topics'].append(next_topic)
@@ -682,6 +686,7 @@ def respond_to_executive_audio():
         
         print(f"🎯 {next_exec} asking question #{next_count}")
         
+        # ========== STEP 9: Return response ==========
         return jsonify({
             'status': 'success',
             'transcription': transcription,
@@ -697,6 +702,7 @@ def respond_to_executive_audio():
             os.remove(filepath)
         
         return jsonify({'status': 'error', 'error': f'Error processing audio: {str(e)}'})
+
 
 @app.route('/generate_tts', methods=['POST'])
 def generate_tts():
