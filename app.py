@@ -8,6 +8,7 @@ import PyPDF2
 import openai
 import pytz
 import copy
+import base64
 CST = pytz.timezone('America/Chicago')
 
 # Initialize Flask app
@@ -37,6 +38,59 @@ except Exception as e:
     import traceback
     traceback.print_exc()  # This will help debug
     openai_available = False
+
+def generate_tts_audio(text, executive_name):
+    """Generate TTS audio and return as base64 data URL"""
+    if not openai_available or not openai_client:
+        return None
+    
+    try:
+        # Map executive names to voices
+        voice_mapping = {
+            'Sarah Chen': 'nova',
+            'Michael Rodriguez': 'onyx',
+            'Dr. Lisa Wang': 'shimmer',
+            'James Thompson': 'fable',
+            'Rebecca Johnson': 'alloy'
+        }
+        voice = voice_mapping.get(executive_name, 'alloy')
+        
+        print(f"🎙️ Pre-generating TTS for {executive_name}")
+        
+        # ✅ ADD TIMEOUT to prevent hanging
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("TTS generation timeout")
+        
+        # Set 3-second timeout
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(3)
+        
+        try:
+            # Generate TTS
+            tts_response = openai_client.audio.speech.create(
+                model="tts-1",  # ✅ Use tts-1 (faster) instead of tts-1-hd
+                voice=voice,
+                input=text[:500]  # ✅ Limit text length to speed up
+            )
+            
+            # Encode as base64 data URL
+            audio_data = base64.b64encode(tts_response.content).decode('utf-8')
+            tts_url = f"data:audio/mpeg;base64,{audio_data}"
+            
+            print(f"✅ TTS pre-generated ({len(audio_data)} bytes)")
+            return tts_url
+        finally:
+            signal.alarm(0)  # Cancel timeout
+        
+    except TimeoutError:
+        print(f"⚠️ TTS timeout - skipping pre-generation")
+        return None
+    except Exception as e:
+        print(f"⚠️ TTS pre-generation failed: {e}")
+        return None
+
 
 # In-memory session storage (avoids cookie size issues)
 session_storage = {}
@@ -453,12 +507,18 @@ def respond_to_executive():
             next_count
         )
         
+        exec_name = get_executive_name(next_exec)
+        
+        # ✅ Pre-generate TTS audio
+        tts_url = generate_tts_audio(next_question, exec_name)
+        
         follow_up = {
             'executive': next_exec,
-            'name': get_executive_name(next_exec),
+            'name': exec_name,
             'title': next_exec,
             'question': next_question,
-            'timestamp': datetime.now(CST).isoformat()
+            'timestamp': datetime.now(CST).isoformat(),
+            'tts_url': tts_url  # ✅ Add TTS URL
         }
         
         session_data['current_question_count'] = next_count
@@ -574,12 +634,19 @@ def respond_to_executive_audio():
             next_count
         )
         
+        exec_name = get_executive_name(next_exec)
+        
+        # ✅ Skip TTS for audio responses (faster processing)
+        # tts_url = generate_tts_audio(next_question, exec_name)
+        tts_url = None  # Frontend will generate on-demand if needed
+        
         follow_up = {
             'executive': next_exec,
-            'name': get_executive_name(next_exec),
+            'name': exec_name,
             'title': next_exec,
             'question': next_question,
-            'timestamp': datetime.now(CST).isoformat()
+            'timestamp': datetime.now(CST).isoformat(),
+            'tts_url': tts_url  # ✅ Add TTS URL
         }
         
         session_data['current_question_count'] = next_count
@@ -608,6 +675,52 @@ def respond_to_executive_audio():
             os.remove(filepath)
         
         return jsonify({'status': 'error', 'error': f'Error processing audio: {str(e)}'})
+
+@app.route('/generate_tts', methods=['POST'])
+def generate_tts():
+    """Generate text-to-speech audio for executive questions using OpenAI"""
+    try:
+        data = request.get_json()
+        text = data.get('text', '')
+        voice = data.get('voice', 'alloy')
+        
+        if not text:
+            return jsonify({'status': 'error', 'error': 'No text provided'})
+        
+        if not openai_available or not openai_client:
+            return jsonify({'status': 'error', 'error': 'TTS not available - OpenAI not configured'})
+        
+        print(f"🎙️ Generating TTS with voice: {voice}")
+        
+        # Generate speech using OpenAI TTS
+        response = openai_client.audio.speech.create(
+            model="tts-1",  # Use "tts-1-hd" for higher quality (2x cost)
+            voice=voice,
+            input=text,
+            speed=1.0  # Adjust speed if needed (0.25 to 4.0)
+        )
+        
+        # Get audio content
+        audio_content = response.content
+        
+        print(f"✅ Generated {len(audio_content)} bytes of audio")
+        
+        # Return as audio stream
+        return Response(
+            audio_content,
+            mimetype='audio/mpeg',
+            headers={
+                'Content-Disposition': 'inline; filename=question.mp3',
+                'Cache-Control': 'no-cache'
+            }
+        )
+        
+    except Exception as e:
+        print(f"❌ TTS Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
 
 @app.route('/end_session', methods=['POST'])
 def end_session():
