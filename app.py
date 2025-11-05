@@ -55,25 +55,42 @@ def generate_tts_audio(text, executive_name):
         }
         voice = voice_mapping.get(executive_name, 'alloy')
         
-        print(f"🎙️ Pre-generating TTS for {executive_name} with voice {voice}")
+        print(f"🎙️ Pre-generating TTS for {executive_name}")
         
-        # Generate TTS
-        tts_response = openai_client.audio.speech.create(
-            model="tts-1",
-            voice=voice,
-            input=text
-        )
+        # ✅ ADD TIMEOUT to prevent hanging
+        import signal
         
-        # Encode as base64 data URL
-        audio_data = base64.b64encode(tts_response.content).decode('utf-8')
-        tts_url = f"data:audio/mpeg;base64,{audio_data}"
+        def timeout_handler(signum, frame):
+            raise TimeoutError("TTS generation timeout")
         
-        print(f"✅ TTS pre-generated ({len(audio_data)} bytes)")
-        return tts_url
+        # Set 3-second timeout
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(3)
         
-    except Exception as e:
-        print(f"❌ TTS pre-generation failed: {e}")
+        try:
+            # Generate TTS
+            tts_response = openai_client.audio.speech.create(
+                model="tts-1",  # ✅ Use tts-1 (faster) instead of tts-1-hd
+                voice=voice,
+                input=text[:500]  # ✅ Limit text length to speed up
+            )
+            
+            # Encode as base64 data URL
+            audio_data = base64.b64encode(tts_response.content).decode('utf-8')
+            tts_url = f"data:audio/mpeg;base64,{audio_data}"
+            
+            print(f"✅ TTS pre-generated ({len(audio_data)} bytes)")
+            return tts_url
+        finally:
+            signal.alarm(0)  # Cancel timeout
+        
+    except TimeoutError:
+        print(f"⚠️ TTS timeout - skipping pre-generation")
         return None
+    except Exception as e:
+        print(f"⚠️ TTS pre-generation failed: {e}")
+        return None
+
 
 # In-memory session storage (avoids cookie size issues)
 session_storage = {}
@@ -619,8 +636,9 @@ def respond_to_executive_audio():
         
         exec_name = get_executive_name(next_exec)
         
-        # ✅ Pre-generate TTS audio
-        tts_url = generate_tts_audio(next_question, exec_name)
+        # ✅ Skip TTS for audio responses (faster processing)
+        # tts_url = generate_tts_audio(next_question, exec_name)
+        tts_url = None  # Frontend will generate on-demand if needed
         
         follow_up = {
             'executive': next_exec,
