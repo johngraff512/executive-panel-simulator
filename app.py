@@ -609,6 +609,52 @@ def respond_to_executive_audio():
         
         return jsonify({'status': 'error', 'error': f'Error processing audio: {str(e)}'})
 
+@app.route('/generate_tts', methods=['POST'])
+def generate_tts():
+    """Generate text-to-speech audio for executive questions using OpenAI"""
+    try:
+        data = request.get_json()
+        text = data.get('text', '')
+        voice = data.get('voice', 'alloy')
+        
+        if not text:
+            return jsonify({'status': 'error', 'error': 'No text provided'})
+        
+        if not openai_available or not openai_client:
+            return jsonify({'status': 'error', 'error': 'TTS not available - OpenAI not configured'})
+        
+        print(f"🎙️ Generating TTS with voice: {voice}")
+        
+        # Generate speech using OpenAI TTS
+        response = openai_client.audio.speech.create(
+            model="tts-1",  # Use "tts-1-hd" for higher quality (2x cost)
+            voice=voice,
+            input=text,
+            speed=1.0  # Adjust speed if needed (0.25 to 4.0)
+        )
+        
+        # Get audio content
+        audio_content = response.content
+        
+        print(f"✅ Generated {len(audio_content)} bytes of audio")
+        
+        # Return as audio stream
+        return Response(
+            audio_content,
+            mimetype='audio/mpeg',
+            headers={
+                'Content-Disposition': 'inline; filename=question.mp3',
+                'Cache-Control': 'no-cache'
+            }
+        )
+        
+    except Exception as e:
+        print(f"❌ TTS Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+
 @app.route('/end_session', methods=['POST'])
 def end_session():
     """End session and return summary data"""
