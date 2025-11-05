@@ -299,6 +299,9 @@ def transcribe_audio_whisper(audio_file_path):
 def index():
     """Render main page"""
     clear_session_data()
+    sid = get_session_id()
+    if sid in responses_storage:
+        del responses_storage[sid]
     return render_template('index.html', ai_available=openai_available)
 
 @app.route('/upload_report', methods=['POST'])
