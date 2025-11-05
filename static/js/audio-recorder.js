@@ -149,44 +149,47 @@ class AudioRecorder {
 
     displayNextQuestion(followUp) {
         this.hideProcessingIndicator();
-        
+    
         // Store current executive
         this.currentExecutive = followUp.executive;
-
-        // Display the next question
-        const questionHTML = `
-            <div class="executive-question" data-executive="${followUp.executive}">
-                <div class="executive-header">
-                    <div class="executive-avatar ${followUp.executive.toLowerCase()}">
-                        ${followUp.name.charAt(0)}
+    
+        // ✅ USE the simulator's addExecutiveMessage function instead
+        if (window.simulator && window.simulator.addExecutiveMessage) {
+            window.simulator.addExecutiveMessage(followUp);
+        
+            // Show response area for next answer
+            if (window.simulator.showResponseArea) {
+                window.simulator.showResponseArea(followUp.executive);
+            }
+        } else {
+            // Fallback: manually display question (old way)
+            const questionHTML = `
+                <div class="card border-primary mb-3">
+                    <div class="card-header bg-primary text-white">
+                        <strong>${followUp.name}</strong> (${followUp.title})
                     </div>
-                    <div class="executive-info">
-                        <strong>${followUp.name}</strong>
-                        <span>${followUp.title}</span>
+                    <div class="card-body">
+                        <p class="mb-0">${followUp.question}</p>
                     </div>
                 </div>
-                <div class="question-text">
-                    ${followUp.question}
-                </div>
-                <div class="question-time">${new Date().toLocaleTimeString()}</div>
-            </div>
-        `;
-
-        const questionContainer = document.getElementById('questionContainer');
-        if (questionContainer) {
-            questionContainer.innerHTML = questionHTML;
+            `;
+        
+            const questionContainer = document.getElementById('questionContainer');
+            if (questionContainer) {
+                questionContainer.innerHTML = questionHTML;
+            }
         }
-
+    
         // Reset recording UI
         this.updateRecordingUI(false);
-        
-        // Clear transcription preview
-        const transcriptionDiv = document.getElementById('transcriptionPreview');
-        if (transcriptionDiv) {
-            setTimeout(() => {
-                transcriptionDiv.style.display = 'none';
-            }, 3000); // Hide after 3 seconds
-        }
+    
+        // Clear transcription preview after delay
+        setTimeout(() => {
+            const preview = document.getElementById('transcriptionPreview');
+            if (preview) {
+                preview.style.display = 'none';
+            }
+        }, 3000);
     }
 
     displayClosingMessage(followUp) {
