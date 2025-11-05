@@ -1140,13 +1140,18 @@
                                 this.addExecutiveMessage(data.follow_up);
                                 this.currentExecutive = data.follow_up.executive;
                                 
-                                // Check if this is a closing message or session is ending
+                                // Check if this is a closing message or session is ending  
                                 if (data.follow_up.is_closing || data.session_ending) {
                                     this.sessionEnding = true;
-                                    // Don't show response area for closing messages
+                                    // ✅ Wait for TTS audio to finish
+                                    this.audioElement.onended = () => {
+                                        setTimeout(() => this.showSessionEndedMessage(), 3000);
+                                    };
+                                    // Fallback in case no audio
                                     setTimeout(() => {
+                                        if (!this.sessionEnding) return;
                                         this.showSessionEndedMessage();
-                                    }, 3000); // Wait 3 seconds then show summary
+                                    }, 30000); // 30 second fallback
                                 } else {
                                     this.showResponseArea(data.follow_up.executive);
                                 }
