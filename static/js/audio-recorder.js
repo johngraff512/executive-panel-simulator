@@ -194,7 +194,7 @@ class AudioRecorder {
             // Wait for TTS audio to finish before showing summary
             setTimeout(() => {
                 window.simulator.showSessionEndedMessage();
-            }, 30000);
+            }, 8000);
         }
     }
 
