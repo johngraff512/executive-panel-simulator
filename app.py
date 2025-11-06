@@ -200,9 +200,9 @@ def generate_template_key_details(company_name, industry, report_type):
 EXECUTIVE_NAMES = {
     'CEO': 'Sarah Chen',
     'CFO': 'Michael Rodriguez',
-    'CTO': 'Rebecca Johnson',
-    'CMO': 'David Kim',
-    'COO': 'Jennifer Martinez'
+    'CTO': 'Dr. Lisa Kincaid',
+    'CMO': 'James Thompson',
+    'COO': 'Rebecca Johnson'
 }
 
 def get_executive_name(role):
