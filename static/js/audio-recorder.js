@@ -12,12 +12,12 @@ class AudioRecorder {
     async startRecording() {
         try {
             // Request microphone access
-            const stream = await navigator.mediaDevices.getUserMedia({ 
+            const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
                     sampleRate: 44100
-                } 
+                }
             });
 
             // Create MediaRecorder with webm format
@@ -50,7 +50,6 @@ class AudioRecorder {
 
         } catch (error) {
             console.error('Error accessing microphone:', error);
-            
             if (error.name === 'NotAllowedError') {
                 alert('Microphone access denied. Please allow microphone access in your browser settings and try again.');
             } else if (error.name === 'NotFoundError') {
@@ -70,7 +69,7 @@ class AudioRecorder {
             
             this.isRecording = false;
             this.stopTimer();
-
+            
             console.log('⏹️ Recording stopped');
         }
     }
@@ -78,7 +77,6 @@ class AudioRecorder {
     async handleRecordingComplete() {
         // Create audio blob from chunks
         const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-        
         console.log(`📦 Audio blob created: ${audioBlob.size} bytes`);
 
         // Upload and process
@@ -107,21 +105,23 @@ class AudioRecorder {
             if (result.status === 'success') {
                 // Display transcription
                 this.displayTranscription(result.transcription);
-    
-                // ✅ ADD: Show transcription as student message in chat
+
+                // Show transcription as student message
                 if (window.simulator && window.simulator.addStudentMessage) {
                     window.simulator.addStudentMessage(result.transcription + ' [Audio]');
                 }
-    
-                // ✅ ADD: Wait a moment before showing next question
+
+                // Wait a moment before showing next question
                 setTimeout(() => {
-                    // Display next question or closing
-                    if (result.session_ending) {
+                    // ✅ FIXED: Check for session ending or closing message
+                    if (result.session_ending || (result.follow_up && result.follow_up.is_closing)) {
+                        console.log('✅ Session ending, displaying closing message');
                         this.displayClosingMessage(result.follow_up);
-                    } else {
+                    } else if (result.follow_up) {
                         this.displayNextQuestion(result.follow_up);
                     }
                 }, 1000);
+
             } else {
                 alert('Error processing audio: ' + result.error);
                 this.hideProcessingIndicator();
@@ -138,9 +138,8 @@ class AudioRecorder {
         const transcriptionDiv = document.getElementById('transcriptionPreview');
         if (transcriptionDiv) {
             transcriptionDiv.innerHTML = `
-                <div class="transcription-box">
-                    <strong>Your Response (transcribed):</strong>
-                    <p>${text}</p>
+                <div class="alert alert-info">
+                    <strong>Your response:</strong> ${text}
                 </div>
             `;
             transcriptionDiv.style.display = 'block';
@@ -148,113 +147,49 @@ class AudioRecorder {
     }
 
     displayNextQuestion(followUp) {
+        console.log('Displaying next question:', followUp);
+        
         this.hideProcessingIndicator();
-    
-        // Store current executive
-        this.currentExecutive = followUp.executive;
-    
-        // ✅ USE the simulator's addExecutiveMessage function instead
-        if (window.simulator && window.simulator.addExecutiveMessage) {
+
+        // Add to main simulator
+        if (window.simulator) {
             window.simulator.addExecutiveMessage(followUp);
-        
-            // Show response area for next answer
-            if (window.simulator.showResponseArea) {
-                window.simulator.showResponseArea(followUp.executive);
-            }
-        } else {
-            // Fallback: manually display question (old way)
-            const questionHTML = `
-                <div class="card border-primary mb-3">
-                    <div class="card-header bg-primary text-white">
-                        <strong>${followUp.name}</strong> (${followUp.title})
-                    </div>
-                    <div class="card-body">
-                        <p class="mb-0">${followUp.question}</p>
-                    </div>
-                </div>
-            `;
-        
-            const questionContainer = document.getElementById('questionContainer');
-            if (questionContainer) {
-                questionContainer.innerHTML = questionHTML;
-            }
+            window.simulator.speakQuestion(followUp);
+            window.simulator.showResponseArea(followUp.executive);
         }
-    
-        // Reset recording UI
-        this.updateRecordingUI(false);
-    
-        // Clear transcription preview after delay
-        setTimeout(() => {
-            const preview = document.getElementById('transcriptionPreview');
-            if (preview) {
-                preview.style.display = 'none';
-            }
-        }, 3000);
     }
 
+    // ✅ ADD THIS NEW METHOD:
     displayClosingMessage(followUp) {
+        console.log('✅ Displaying closing message:', followUp);
+        
         this.hideProcessingIndicator();
-        
-        const closingHTML = `
-            <div class="session-complete">
-                <h2>Session Complete!</h2>
-                <div class="closing-message">
-                    <p>${followUp.question}</p>
-                </div>
-                <button onclick="window.location.href='/download_transcript'" class="btn-download">
-                    📄 Download Transcript
-                </button>
-            </div>
-        `;
 
-        const questionContainer = document.getElementById('questionContainer');
-        if (questionContainer) {
-            questionContainer.innerHTML = closingHTML;
-        }
-
-        // Hide response controls
-        document.getElementById('responseSection').style.display = 'none';
-    }
-
-    updateRecordingUI(recording) {
-        const recordBtn = document.getElementById('recordButton');
-        const recordingIndicator = document.getElementById('recordingIndicator');
-        const stopBtn = document.getElementById('stopButton');
-
-        if (recording) {
-            recordBtn.style.display = 'none';
-            stopBtn.style.display = 'inline-block';
-            recordingIndicator.style.display = 'flex';
-        } else {
-            recordBtn.style.display = 'inline-block';
-            stopBtn.style.display = 'none';
-            recordingIndicator.style.display = 'none';
-        }
-    }
-
-    startTimer() {
-        const timerDisplay = document.getElementById('recordingTimer');
-        
-        this.timerInterval = setInterval(() => {
-            const elapsed = Date.now() - this.recordingStartTime;
-            const minutes = Math.floor(elapsed / 60000);
-            const seconds = Math.floor((elapsed % 60000) / 1000);
+        // Add closing message to chat
+        if (window.simulator && followUp) {
+            window.simulator.addExecutiveMessage(followUp);
+            window.simulator.speakQuestion(followUp);
             
-            timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        }, 1000);
-    }
-
-    stopTimer() {
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
-            this.timerInterval = null;
+            // Mark session as ending
+            window.simulator.sessionEnding = true;
+            
+            // Wait for TTS audio to finish before showing summary
+            // Use a longer delay for closing message (30 seconds)
+            setTimeout(() => {
+                window.simulator.showSessionEndedMessage();
+            }, 30000);
         }
     }
 
     showProcessingIndicator() {
         const indicator = document.getElementById('processingIndicator');
         if (indicator) {
-            indicator.style.display = 'flex';
+            indicator.style.display = 'block';
+        }
+        
+        const recordBtn = document.getElementById('recordBtn');
+        if (recordBtn) {
+            recordBtn.disabled = true;
         }
     }
 
@@ -263,38 +198,61 @@ class AudioRecorder {
         if (indicator) {
             indicator.style.display = 'none';
         }
+
+        const recordBtn = document.getElementById('recordBtn');
+        if (recordBtn) {
+            recordBtn.disabled = false;
+        }
+    }
+
+    updateRecordingUI(isRecording) {
+        const recordBtn = document.getElementById('recordBtn');
+        const stopBtn = document.getElementById('stopRecordBtn');
+        
+        if (recordBtn && stopBtn) {
+            if (isRecording) {
+                recordBtn.style.display = 'none';
+                stopBtn.style.display = 'inline-block';
+            } else {
+                recordBtn.style.display = 'inline-block';
+                stopBtn.style.display = 'none';
+            }
+        }
+    }
+
+    startTimer() {
+        const timerDisplay = document.getElementById('recordingTimer');
+        if (!timerDisplay) return;
+
+        timerDisplay.style.display = 'block';
+        
+        this.timerInterval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - this.recordingStartTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            timerDisplay.textContent = `Recording: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }, 1000);
+    }
+
+    stopTimer() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+
+        const timerDisplay = document.getElementById('recordingTimer');
+        if (timerDisplay) {
+            timerDisplay.style.display = 'none';
+        }
+    }
+
+    setCurrentExecutive(executive) {
+        this.currentExecutive = executive;
     }
 }
 
-// Initialize global recorder instance
-const audioRecorder = new AudioRecorder();
-
-// Global functions for button clicks
-function startRecording() {
-    audioRecorder.startRecording();
-}
-
-function stopRecording() {
-    audioRecorder.stopRecording();
-}
-
-function toggleRecordingMode() {
-    const textMode = document.getElementById('textResponseSection');
-    const audioMode = document.getElementById('audioResponseSection');
-    const textBtn = document.getElementById('textModeBtn');
-    const audioBtn = document.getElementById('audioModeBtn');
-
-    if (textMode.style.display === 'none') {
-        // Switch to text mode
-        textMode.style.display = 'block';
-        audioMode.style.display = 'none';
-        textBtn.classList.add('active');
-        audioBtn.classList.remove('active');
-    } else {
-        // Switch to audio mode
-        textMode.style.display = 'none';
-        audioMode.style.display = 'block';
-        textBtn.classList.remove('active');
-        audioBtn.classList.add('active');
-    }
-}
+// Initialize audio recorder when page loads
+window.addEventListener('DOMContentLoaded', () => {
+    window.audioRecorder = new AudioRecorder();
+    console.log('✅ Audio recorder initialized');
+});
