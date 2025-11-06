@@ -398,8 +398,8 @@ def upload_report():
             report_content, first_executive, company_name, industry, report_type,
             key_details, [], 1
         )
-        
-        # Generate TTS for first question
+
+        # Generate TTS for first question (welcome message)
         exec_name = get_executive_name(first_executive)
         first_tts_url = generate_tts_audio(first_question, exec_name)
 
@@ -409,8 +409,8 @@ def upload_report():
             'title': first_executive,
             'question': first_question,
             'timestamp': datetime.now(CST).isoformat(),
-            'tts_url': first_tts_url  # Add TTS URL
-}
+            'tts_url': first_tts_url  # Add TTS URL for first question
+        }
         
         # Store in memory
         session_data = {
