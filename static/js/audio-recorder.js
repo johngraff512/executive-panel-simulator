@@ -148,8 +148,17 @@ class AudioRecorder {
 
     displayNextQuestion(followUp) {
         console.log('Displaying next question:', followUp);
-        
+    
+        // ✅ RESET RECORDING UI BEFORE SHOWING NEXT QUESTION
+        this.updateRecordingUI(false);  // Hide Stop button, show Record button
         this.hideProcessingIndicator();
+    
+        // ✅ CLEAR TRANSCRIPTION PREVIEW
+        const transcriptionDiv = document.getElementById('transcriptionPreview');
+        if (transcriptionDiv) {
+            transcriptionDiv.innerHTML = '';
+            transcriptionDiv.style.display = 'none';
+        }
 
         // Add to main simulator
         if (window.simulator) {
@@ -162,19 +171,27 @@ class AudioRecorder {
     // ✅ ADD THIS NEW METHOD:
     displayClosingMessage(followUp) {
         console.log('✅ Displaying closing message:', followUp);
-        
+    
+        // ✅ RESET RECORDING UI
+        this.updateRecordingUI(false);
         this.hideProcessingIndicator();
+    
+        // ✅ CLEAR TRANSCRIPTION PREVIEW
+        const transcriptionDiv = document.getElementById('transcriptionPreview');
+        if (transcriptionDiv) {
+            transcriptionDiv.innerHTML = '';
+            transcriptionDiv.style.display = 'none';
+        }
 
         // Add closing message to chat
         if (window.simulator && followUp) {
             window.simulator.addExecutiveMessage(followUp);
             window.simulator.speakQuestion(followUp);
-            
+        
             // Mark session as ending
             window.simulator.sessionEnding = true;
-            
+        
             // Wait for TTS audio to finish before showing summary
-            // Use a longer delay for closing message (30 seconds)
             setTimeout(() => {
                 window.simulator.showSessionEndedMessage();
             }, 30000);
