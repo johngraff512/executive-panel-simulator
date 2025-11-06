@@ -982,36 +982,35 @@
                 conversationArea.appendChild(welcomeElement);
             }
             
-            addExecutiveMessage(questionData) {
-                const conversationArea = document.getElementById('conversation-area');
-                const messageElement = document.createElement('div');
-                messageElement.className = 'message executive';
-                
-                const time = new Date(questionData.timestamp).toLocaleTimeString();
-                const icon = this.getExecutiveIcon(questionData.executive);
-                
-                messageElement.innerHTML = `
-                    <div class="message-header">
-                        <div class="executive-avatar avatar-${questionData.executive}">
-                            ${icon}
-                        </div>
-                        <div>
-                            <strong>${questionData.name}</strong>
-                            <small class="text-muted d-block">${questionData.title}</small>
-                        </div>
+            addExecutiveMessage(message) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'executive-message';
+    
+                // ✅ OPTION A: Show "Generating audio..." if TTS is enabled but not ready
+                if (this.ttsEnabled && !message.tts_url) {
+                    const loadingDiv = document.createElement('div');
+                    loadingDiv.className = 'alert alert-info';
+                    loadingDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Thinking of next question ...';
+                    this.conversationArea.appendChild(loadingDiv);
+        
+                    // Remove loading after 2 seconds
+                    setTimeout(() => loadingDiv.remove(), 2000);
+                }
+    
+                // Show the actual message
+                messageDiv.innerHTML = `
+                    <div class="executive-header">
+                        <strong>${message.name}</strong>
+                        <span class="executive-title">${message.title}</span>
                     </div>
-                    <div class="message-bubble">
-                        <p class="mb-0">${questionData.question}</p>
-                        <div class="message-time">${time}</div>
-                    </div>
+                    <div class="executive-question">${message.question}</div>
+                    <div class="message-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
                 `;
-                
-                conversationArea.appendChild(messageElement);
-                this.scrollToBottom();
-                this.setActiveExecutive(questionData.executive);
-                // ✅ ADD THIS LINE:
-                this.speakQuestion(questionData);
+    
+                this.conversationArea.appendChild(messageDiv);
+                this.conversationArea.scrollTop = this.conversationArea.scrollHeight;
             }
+
             
             addStudentMessage(response) {
                 const conversationArea = document.getElementById('conversation-area');
