@@ -941,18 +941,23 @@
                 this.showPhase('simulation');
             }
             
-            startPresentation(firstQuestion) {
-    // Transition to presentation phase with the question already received
-    try {
-        if (firstQuestion) {
-            this.displayInitialQuestions([firstQuestion]);  // Pass as array
-        } else {
-            throw new Error('No question data received');
-        }
-    } catch (error) {
-        alert('Error starting presentation: ' + error.message);
-    }
-}
+            async startPresentation(firstQuestion) {
+                // Transition to presentation phase with the question already received
+                try {
+                    if (firstQuestion) {
+                        this.displayInitialQuestions([firstQuestion]); // Pass as array
+                    
+                        // Play TTS for first question
+                        if (firstQuestion.tts_url) {
+                            await this.speakQuestion(firstQuestion);
+                        }
+                    } else {
+                        throw new Error('No question data received');
+                    }
+                  } catch (error) {
+                    alert('Error starting presentation: ' + error.message);
+                    }
+            }
             
             displayInitialQuestions(questions) {
                 const conversationArea = document.getElementById('conversation-area');
@@ -1103,22 +1108,23 @@
                         this.hideLoadingMessage();
                         
                         if (data.follow_up) {
-                            setTimeout(() => {
+                            setTimeout(async () => {
                                 this.addExecutiveMessage(data.follow_up);
                                 this.currentExecutive = data.follow_up.executive;
-                                
-                                // Check if this is a closing message or session is ending  
+                        
+                                // Play TTS for follow-up question
+                                if (data.follow_up.tts_url) {
+                                    await this.speakQuestion(data.follow_up);
+                                }
+                        
+                                // Check if this is a closing message or session is ending
                                 if (data.follow_up.is_closing || data.session_ending) {
                                     this.sessionEnding = true;
-                                    // ✅ Wait for TTS audio to finish
-                                    this.audioElement.onended = () => {
-                                        setTimeout(() => this.showSessionEndedMessage(), 3000);
-                                    };
-                                    // Fallback in case no audio
-                                    setTimeout(() => {
-                                        if (!this.sessionEnding) return;
-                                        this.showSessionEndedMessage();
-                                    }, 30000); // 30 second fallback
+                                    this.showDownloadTranscript();
+                            
+                                    const welcomePhase = document.getElementById('welcome');
+                                    welcomePhase.classList.remove('active');
+                                    this.showPhase('panel-session');
                                 } else {
                                     this.showResponseArea(data.follow_up.executive);
                                 }
