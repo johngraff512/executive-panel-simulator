@@ -620,8 +620,8 @@ def respond_to_executive_audio():
             report_type = session_data.get('report_type', 'presentation')
             closing_message = generate_closing_message(company_name, report_type)
             
-            # Pre-generate TTS for closing message
-            tts_url = generate_tts_audio(closing_message, "Sarah Chen")
+            # ✅ SKIP TTS - too slow
+            tts_url = None
             
             session_data['current_question_count'] = next_count
             store_session_data(session_data)
@@ -663,8 +663,9 @@ def respond_to_executive_audio():
         
         exec_name = get_executive_name(next_exec)
         
-        # Pre-generate TTS for next question
-        tts_url = generate_tts_audio(next_question, exec_name)
+        # ✅ SKIP TTS pre-generation for audio responses (too slow, causes timeouts)
+        # Users can enable TTS manually if needed
+        tts_url = None
         
         follow_up = {
             'executive': next_exec,
