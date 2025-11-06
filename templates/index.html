@@ -684,6 +684,7 @@
                 this.reportUploaded = false;
                 this.sessionEnding = false;
                 this.init();
+                this.isSpeaking = false;  // ✅ Add this flag
                 // ✅ ADD THESE NEW PROPERTIES:
                 // Voice mapping for each executive (personalized voices)
                 this.executiveVoices = {
@@ -1253,41 +1254,29 @@
                     return;
                 }
     
+                // ✅ PREVENT DUPLICATE CALLS
+                if (this.isSpeaking) {
+                    console.log('⚠️ Already speaking, skipping duplicate call');
+                    return;
+                }
+    
                 try {
-                    // ✅ CHECK IF AUDIO IS PRE-GENERATED (instant playback!)
+                    this.isSpeaking = true;  // Set flag
+        
+                    // If TTS URL exists, play it
                     if (question.tts_url) {
                         console.log('🎙️ Playing pre-generated TTS');
                         this.audioElement.src = question.tts_url;
                         await this.audioElement.play();
-                        console.log('✅ Audio playing (instant)');
-                        return;
-                    }
-        
-                    // Fallback: Generate on-demand (if pre-generation failed)
-                    const voice = this.executiveVoices[question.name] || 'alloy';
-                    console.log(`🎙️ Generating TTS on-demand for ${question.name}`);
-        
-                    const response = await fetch('/generate_tts', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            text: question.question,
-                            voice: voice
-                        })
-                    });
-        
-                    if (response.ok) {
-                        const audioBlob = await response.blob();
-                        const audioUrl = URL.createObjectURL(audioBlob);
-            
-                        this.audioElement.src = audioUrl;
-                        await this.audioElement.play();
-                        console.log('✅ Audio playing (on-demand)');
+                        console.log('✅ Audio playing');
                     } else {
-                        console.error('TTS generation failed');
+                        console.log('⚠️ No TTS available');
                     }
+        
                 } catch (error) {
                     console.error('TTS error:', error);
+                } finally {
+                    this.isSpeaking = false;  // Reset flag when done
                 }
             }
     
