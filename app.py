@@ -522,7 +522,8 @@ def respond_to_executive():
         exec_name = get_executive_name(next_exec)
         
         # Pre-generate TTS for next question
-        tts_url = generate_tts_audio(next_question, exec_name)
+        # tts_url = generate_tts_audio(next_question, exec_name)
+        tts_url = None  # Will generate on-demand if user enables TTS
         
         follow_up = {
             'executive': next_exec,
