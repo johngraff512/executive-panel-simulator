@@ -1120,7 +1120,7 @@
                                 // Check if this is a closing message or session is ending
                                 if (data.follow_up.is_closing || data.session_ending) {
                                     this.sessionEnding = true;
-                                    this.showDownloadTranscript();
+                                    this.showSessionEndedMessage();
                 
                                     const welcomePhase = document.getElementById('welcome');
                                     welcomePhase.classList.remove('active');
