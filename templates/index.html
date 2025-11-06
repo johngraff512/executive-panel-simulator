@@ -1125,10 +1125,17 @@
                                     const welcomePhase = document.getElementById('welcome');
                                     welcomePhase.classList.remove('active');
                                     this.showPhase('panel-session');
+                            
+                                    // Auto-end session after closing message
+                                    setTimeout(() => {
+                                        this.endSession();
+                                    }, 3000); // Wait 3 seconds for user to read/hear closing message
                                 } else {
                                     this.showResponseArea(data.follow_up.executive);
                                 }
                             }, 1000);
+                        }
+
                         }
                     } else {
                         throw new Error(data.error || 'Failed to get response');
