@@ -1129,14 +1129,13 @@
                                     // Auto-end session after closing message
                                     setTimeout(() => {
                                         this.endSession();
-                                    }, 3000); // Wait 3 seconds for user to read/hear closing message
+                                    }, 3000);
                                 } else {
                                     this.showResponseArea(data.follow_up.executive);
                                 }
                             }, 1000);
                         }
-
-                        }
+                    }
                     } else {
                         throw new Error(data.error || 'Failed to get response');
                     }
