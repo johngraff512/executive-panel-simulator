@@ -983,21 +983,12 @@
             }
             
             addExecutiveMessage(message) {
+                const conversationArea = document.getElementById('conversation-area');
+    
+                // Show actual message (always do this)
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'executive-message';
     
-                // ✅ OPTION A: Show "Generating audio..." if TTS is enabled but not ready
-                if (this.ttsEnabled && !message.tts_url) {
-                    const loadingDiv = document.createElement('div');
-                    loadingDiv.className = 'alert alert-info';
-                    loadingDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Thinking of next question ...';
-                    this.conversationArea.appendChild(loadingDiv);
-        
-                    // Remove loading after 2 seconds
-                    setTimeout(() => loadingDiv.remove(), 2000);
-                }
-    
-                // Show the actual message
                 messageDiv.innerHTML = `
                     <div class="executive-header">
                         <strong>${message.name}</strong>
@@ -1007,10 +998,9 @@
                     <div class="message-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
                 `;
     
-                this.conversationArea.appendChild(messageDiv);
-                this.conversationArea.scrollTop = this.conversationArea.scrollHeight;
+                conversationArea.appendChild(messageDiv);
+                conversationArea.scrollTop = conversationArea.scrollHeight;
             }
-
             
             addStudentMessage(response) {
                 const conversationArea = document.getElementById('conversation-area');
