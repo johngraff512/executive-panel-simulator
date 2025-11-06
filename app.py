@@ -399,13 +399,18 @@ def upload_report():
             key_details, [], 1
         )
         
+        # Generate TTS for first question
+        exec_name = get_executive_name(first_executive)
+        first_tts_url = generate_tts_audio(first_question, exec_name)
+
         first_q = {
             'executive': first_executive,
-            'name': get_executive_name(first_executive),
+            'name': exec_name,
             'title': first_executive,
             'question': first_question,
-            'timestamp': datetime.now(CST).isoformat()
-        }
+            'timestamp': datetime.now(CST).isoformat(),
+            'tts_url': first_tts_url  # Add TTS URL
+}
         
         # Store in memory
         session_data = {
@@ -520,11 +525,10 @@ def respond_to_executive():
         )
         
         exec_name = get_executive_name(next_exec)
-        
+
         # Pre-generate TTS for next question
-        # tts_url = generate_tts_audio(next_question, exec_name)
-        tts_url = None  # Will generate on-demand if user enables TTS
-        
+        tts_url = generate_tts_audio(next_question, exec_name)
+
         follow_up = {
             'executive': next_exec,
             'name': exec_name,
@@ -620,8 +624,8 @@ def respond_to_executive_audio():
             report_type = session_data.get('report_type', 'presentation')
             closing_message = generate_closing_message(company_name, report_type)
             
-            # ✅ SKIP TTS - too slow
-            tts_url = None
+            # Generate TTS for closing message
+            tts_url = generate_tts_audio(closing_message, "Sarah Chen")
             
             session_data['current_question_count'] = next_count
             store_session_data(session_data)
@@ -663,9 +667,8 @@ def respond_to_executive_audio():
         
         exec_name = get_executive_name(next_exec)
         
-        # ✅ SKIP TTS pre-generation for audio responses (too slow, causes timeouts)
-        # Users can enable TTS manually if needed
-        tts_url = None
+        # Generate TTS for next question
+        tts_url = generate_tts_audio(next_question, exec_name)
         
         follow_up = {
             'executive': next_exec,
