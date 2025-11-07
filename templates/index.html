@@ -315,6 +315,18 @@
                 <i class="fas fa-volume-up"></i> TTS: ON
             </button>
         </div>
+        /* Highlight active executive */
+        .executive-card.active {
+            background-color: #fff3cd !important;
+            border: 3px solid var(--texas-orange) !important;
+            box-shadow: 0 0 15px rgba(191, 87, 0, 0.3);
+            transform: scale(1.05);
+            transition: all 0.3s ease;
+        }
+
+        .executive-card {
+            transition: all 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -917,7 +929,7 @@
                 const executives = {
                     'CEO': { name: 'Sarah Chen', icon: 'fa-crown' },
                     'CFO': { name: 'Michael Rodriguez', icon: 'fa-chart-line' },
-                    'CTO': { name: 'Dr. Lisa Wang', icon: 'fa-microchip' },
+                    'CTO': { name: 'Dr. Lisa Kincaid', icon: 'fa-microchip' },
                     'CMO': { name: 'James Thompson', icon: 'fa-bullhorn' },
                     'COO': { name: 'Rebecca Johnson', icon: 'fa-cogs' }
                 };
@@ -989,6 +1001,10 @@
             
             addExecutiveMessage(message) {
                 const conversationArea = document.getElementById('conversation-area');
+                // Highlight the current executive in the panel
+                if (message && message.executive) {
+                    this.highlightCurrentExecutive(message.executive);
+                }
     
                 // Show actual message (always do this)
                 const messageDiv = document.createElement('div');
@@ -1278,6 +1294,32 @@
                 } finally {
                     this.isSpeaking = false;  // Reset flag when done
                 }
+            }
+                highlightCurrentExecutive(executiveRole) {
+                // Remove active class from all executives
+                document.querySelectorAll('.executive-card').forEach(card => {
+                    card.classList.remove('active');
+                });
+                
+                // Add active class to current executive
+                // Map role to name
+                const roleMap = {
+                    'CEO': 'Sarah Chen',
+                    'CFO': 'Michael Rodriguez',
+                    'CTO': 'Dr. Lisa Kincaid',
+                    'CMO': 'James Thompson',
+                    'COO': 'Rebecca Johnson'
+                };
+                
+                const executiveName = roleMap[executiveRole];
+                
+                // Find and highlight the executive card
+                document.querySelectorAll('.executive-card').forEach(card => {
+                    const nameElement = card.querySelector('h6, .executive-name, strong');
+                    if (nameElement && nameElement.textContent.trim().includes(executiveName)) {
+                        card.classList.add('active');
+                    }
+                });
             }
     
             toggleTTS() {
