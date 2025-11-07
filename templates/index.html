@@ -327,6 +327,18 @@
         .executive-card {
             transition: all 0.3s ease;
         }
+        /* Ensure both panel headers have equal height */
+        .card-header.bg-info,
+        .card-header.bg-success {
+            min-height: 70px;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Ensure the h5 in Executive Panel matches layout */
+        .card-header.bg-info h5 {
+            line-height: 38px; /* Match button height */
+        }
     </style>
 </head>
 <body>
@@ -626,7 +638,7 @@
                         <div class="card-header bg-warning text-dark">
                             <h3 class="mb-0">
                                 <i class="fas fa-chart-bar"></i>
-                                Session Summary & Feedback
+                                Session Summary
                             </h3>
                         </div>
                         <div class="card-body">
