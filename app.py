@@ -167,7 +167,7 @@ Document:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=800
+            max_completion_tokens=800
         )
         
         import json
@@ -268,7 +268,7 @@ Return ONLY the question text, no preamble."""
                 {"role": "user", "content": prompt}
             ],
             temperature=0.8,
-            max_tokens=150
+            max_completion_tokens=150
         )
         
         question = response.choices[0].message.content.strip()
