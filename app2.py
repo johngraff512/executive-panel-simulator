@@ -11,7 +11,7 @@ import copy
 import base64
 CST = pytz.timezone('America/Chicago')
 
-# Initialize Flask app
+# Initialize Flask app 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
 app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # 25MB for audio files
@@ -49,7 +49,7 @@ def generate_tts_audio(text, executive_name):
         voice_mapping = {
             'Sarah Chen': 'nova',
             'Michael Rodriguez': 'onyx',
-            'Dr. Lisa Wang': 'shimmer',
+            'Dr. Lisa Kincaid': 'shimmer',
             'James Thompson': 'fable',
             'Rebecca Johnson': 'alloy'
         }
@@ -161,11 +161,12 @@ Document:
 {document_text[:4000]}"""
 
         response = openai_client.chat.completions.create(
-            model="gpt-5",
+            model="gpt-5", #Upgrade from gpt-4 for better document comprehension
             messages=[
                 {"role": "system", "content": "You are an expert business analyst."},
                 {"role": "user", "content": prompt}
             ],
+            # temperature=1.0, Removed for GPT-5
             max_completion_tokens=800
         )
         
@@ -266,6 +267,7 @@ Return ONLY the question text, no preamble."""
                 {"role": "system", "content": f"You are the {executive} asking tough business questions."},
                 {"role": "user", "content": prompt}
             ],
+            # temperature=1.0, Removed for GPT-5
             max_completion_tokens=150
         )
         
