@@ -161,7 +161,7 @@ Document:
 {document_text[:4000]}"""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-5", #Upgrade from gpt-4 for better document comprehension
             messages=[
                 {"role": "system", "content": "You are an expert business analyst."},
                 {"role": "user", "content": prompt}
@@ -262,7 +262,7 @@ Generate ONE challenging, specific question about this aspect. The question shou
 Return ONLY the question text, no preamble."""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-5",
             messages=[
                 {"role": "system", "content": f"You are the {executive} asking tough business questions."},
                 {"role": "user", "content": prompt}
