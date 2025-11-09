@@ -161,12 +161,13 @@ Document:
 {document_text[:4000]}"""
 
         response = openai_client.chat.completions.create(
-            model="gpt-5",
+            model="gpt-4.1",
             messages=[
                 {"role": "system", "content": "You are an expert business analyst."},
                 {"role": "user", "content": prompt}
             ],
-            max_completion_tokens=800
+            temperature=0.7,
+            max_tokens=800
         )
         
         import json
@@ -261,12 +262,13 @@ Generate ONE challenging, specific question about this aspect. The question shou
 Return ONLY the question text, no preamble."""
 
         response = openai_client.chat.completions.create(
-            model="gpt-5",
+            model="gpt-4.1",
             messages=[
                 {"role": "system", "content": f"You are the {executive} asking tough business questions."},
                 {"role": "user", "content": prompt}
             ],
-            max_completion_tokens=150
+            temperature=0.8,
+            max_tokens=150
         )
         
         question = response.choices[0].message.content.strip()
