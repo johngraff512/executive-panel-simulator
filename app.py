@@ -49,7 +49,7 @@ def generate_tts_audio(text, executive_name):
         voice_mapping = {
             'Sarah Chen': 'nova',
             'Michael Rodriguez': 'onyx',
-            'Dr. Lisa Wang': 'shimmer',
+            'Dr. Lisa Kincaid': 'shimmer',
             'James Thompson': 'fable',
             'Rebecca Johnson': 'alloy'
         }
