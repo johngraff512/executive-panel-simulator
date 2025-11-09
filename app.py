@@ -166,7 +166,7 @@ Document:
                 {"role": "system", "content": "You are an expert business analyst."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
+            # temperature=1.0, Removed for GPT-5
             max_completion_tokens=800
         )
         
@@ -267,7 +267,7 @@ Return ONLY the question text, no preamble."""
                 {"role": "system", "content": f"You are the {executive} asking tough business questions."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.8,
+            # temperature=1.0, Removed for GPT-5
             max_completion_tokens=150
         )
         
