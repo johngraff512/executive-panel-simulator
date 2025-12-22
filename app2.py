@@ -11,7 +11,7 @@ import copy
 import base64
 CST = pytz.timezone('America/Chicago')
 
-# Initialize Flask app
+# Initialize Flask app 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
 app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # 25MB for audio files
@@ -161,13 +161,13 @@ Document:
 {document_text[:4000]}"""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4.1",
+            model="gpt-5", #Upgrade from gpt-4 for better document comprehension
             messages=[
                 {"role": "system", "content": "You are an expert business analyst."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
-            max_tokens=800
+            # temperature=1.0, Removed for GPT-5
+            max_completion_tokens=800
         )
         
         import json
@@ -262,13 +262,13 @@ Generate ONE challenging, specific question about this aspect. The question shou
 Return ONLY the question text, no preamble."""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4.1",
+            model="gpt-5",
             messages=[
                 {"role": "system", "content": f"You are the {executive} asking tough business questions."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.8,
-            max_tokens=150
+            # temperature=1.0, Removed for GPT-5
+            max_completion_tokens=150
         )
         
         question = response.choices[0].message.content.strip()
