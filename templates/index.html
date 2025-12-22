@@ -340,6 +340,54 @@
         .card-header.bg-info h5 {
             line-height: 38px; /* Match button height */
         }
+
+        /* Version 2: Executive Headshot Styles */
+        .executive-message-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .executive-headshot {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid var(--texas-orange);
+            object-fit: cover;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .executive-message-content {
+            flex: 1;
+        }
+
+        .executive-message {
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .executive-header {
+            margin-bottom: 0.5rem;
+        }
+
+        .executive-question {
+            background-color: #f8f9fa;
+            padding: 0.75rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--texas-orange);
+            margin-bottom: 0.5rem;
+        }
+
+        .message-time {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+
+        .badge.bg-info {
+            font-size: 0.75rem;
+            font-weight: normal;
+        }
     </style>
 </head>
 <body>
@@ -522,6 +570,30 @@
                                                 </div>
                                             </label>
                                         </div>
+                                    </div>
+                                </div>
+
+                                <!-- Version 2: Advanced Options -->
+                                <div class="mb-4">
+                                    <label class="form-label">Advanced Options</label>
+                                    <small class="text-muted d-block mb-3">
+                                        Configure additional simulator features
+                                    </small>
+
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="allow-followups" name="allow-followups" value="true">
+                                        <label class="form-check-label" for="allow-followups">
+                                            <strong>Allow Follow-up Questions</strong>
+                                            <small class="text-muted d-block">Executives may ask a follow-up question if your response needs clarification (max 1 per question, every other question)</small>
+                                        </label>
+                                    </div>
+
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="enable-research" name="enable-research" value="true">
+                                        <label class="form-check-label" for="enable-research">
+                                            <strong>Enable Web Research</strong>
+                                            <small class="text-muted d-block">AI will research your company online to ask more informed questions (works best for real companies)</small>
+                                        </label>
                                     </div>
                                 </div>
 
@@ -811,10 +883,10 @@
                     return false;
                 }
                 
-                // Check file size (16MB limit)
-                const maxSize = 16 * 1024 * 1024; // 16MB
+                // Check file size (50MB limit for Version 2)
+                const maxSize = 50 * 1024 * 1024; // 50MB
                 if (file.size > maxSize) {
-                    alert('File too large. Please upload a PDF smaller than 16MB.');
+                    alert('File too large. Please upload a PDF smaller than 50MB.');
                     document.getElementById('report-pdf').value = '';
                     return false;
                 }
@@ -851,6 +923,9 @@
                 const sessionType = document.getElementById('session-type').value;
                 const questionLimit = document.getElementById('question-limit').value;
                 const timeLimit = document.getElementById('time-limit').value;
+                // Version 2: New options
+                const allowFollowups = document.getElementById('allow-followups').checked;
+                const enableResearch = document.getElementById('enable-research').checked;
                 
                 if (!fileInput.files[0] || !companyName || !industry || !reportType) {
                     alert('Please fill in all required fields and upload a PDF report.');
@@ -873,7 +948,10 @@
                     formData.append('industry', industry);
                     formData.append('report_type', reportType);
                     formData.append('question_limit', questionLimit);
-                    
+                    // Version 2: New options
+                    formData.append('allow_followups', allowFollowups);
+                    formData.append('enable_web_research', enableResearch);
+
                     // Append selected executives
                     this.selectedExecutives.forEach(exec => {
                         formData.append('executives[]', exec);
@@ -1018,20 +1096,35 @@
                 if (message && message.executive) {
                     this.highlightCurrentExecutive(message.executive);
                 }
-    
+
                 // Show actual message (always do this)
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'executive-message';
-    
+
+                // Version 2: Add headshot if available
+                const headshotHTML = message.image
+                    ? `<img src="/static/images/executives/${message.image}.png" alt="${message.name}" class="executive-headshot" onerror="this.style.display='none'">`
+                    : '';
+
+                const followupBadge = message.is_followup
+                    ? '<span class="badge bg-info ms-2">Follow-up</span>'
+                    : '';
+
                 messageDiv.innerHTML = `
-                    <div class="executive-header">
-                        <strong>${message.name}</strong>
-                        <span class="executive-title">${message.title}</span>
+                    <div class="executive-message-container">
+                        ${headshotHTML}
+                        <div class="executive-message-content">
+                            <div class="executive-header">
+                                <strong>${message.name}</strong>
+                                <span class="executive-title">${message.title}</span>
+                                ${followupBadge}
+                            </div>
+                            <div class="executive-question">${message.question}</div>
+                            <div class="message-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
+                        </div>
                     </div>
-                    <div class="executive-question">${message.question}</div>
-                    <div class="message-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
                 `;
-    
+
                 conversationArea.appendChild(messageDiv);
                 conversationArea.scrollTop = conversationArea.scrollHeight;
             }

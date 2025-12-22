@@ -6,3 +6,9 @@ werkzeug==2.3.7
 openai>=1.0.0,<2.0.0
 reportlab
 pytz
+# Version 2 dependencies
+pdf2image==1.16.3
+Pillow==10.1.0
+beautifulsoup4==4.12.2
+requests==2.31.0
+lxml==4.9.3
