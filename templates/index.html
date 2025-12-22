@@ -574,10 +574,16 @@
                                 <i class="fas fa-comments"></i>
                                 Presentation Simulation
                             </h5>
-                            <button id="end-session-btn" class="btn btn-outline-light btn-sm">
-                                <i class="fas fa-stop"></i>
-                                End Session
-                            </button>
+                            <div class="d-flex align-items-center gap-3">
+                                <div id="session-timer" class="badge bg-light text-dark" style="display: none; font-size: 1rem; padding: 0.5rem 1rem;">
+                                    <i class="fas fa-clock"></i>
+                                    <span id="timer-display">--:--</span>
+                                </div>
+                                <button id="end-session-btn" class="btn btn-outline-light btn-sm">
+                                    <i class="fas fa-stop"></i>
+                                    End Session
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body">
                             <div id="conversation-area" class="conversation-container">
@@ -708,6 +714,10 @@
                 this.currentExecutive = null;
                 this.reportUploaded = false;
                 this.sessionEnding = false;
+                this.sessionType = 'questions';
+                this.timeLimit = null;
+                this.sessionStartTime = null;
+                this.timerInterval = null;
                 this.init();
                 this.isSpeaking = false;  // ✅ Add this flag
                 // ✅ ADD THESE NEW PROPERTIES:
@@ -873,6 +883,8 @@
                     formData.append('industry', industry);
                     formData.append('report_type', reportType);
                     formData.append('question_limit', questionLimit);
+                    formData.append('session_type', sessionType);
+                    formData.append('time_limit', timeLimit);
                     
                     // Append selected executives
                     this.selectedExecutives.forEach(exec => {
@@ -889,8 +901,19 @@
                     if (data.status === 'success') {
                         this.hideUploadProgress();
                         this.reportUploaded = true;
+
+                        // Store session configuration
+                        this.sessionType = sessionType;
+                        this.timeLimit = sessionType === 'time' ? parseInt(timeLimit) : null;
+                        this.sessionStartTime = new Date();
+
                         this.setupSimulationPhase();
                         this.startPresentation(data.first_question);
+
+                        // Start timer if time-based session
+                        if (this.sessionType === 'time') {
+                            this.startSessionTimer();
+                        }
                     } else {
                         throw new Error(data.error || 'Failed to setup session');
                     }
@@ -1211,9 +1234,11 @@
             
             async endSession() {
                 try {
+                    this.stopSessionTimer();
+
                     const response = await fetch('/end_session', { method: 'POST' });
                     const data = await response.json();
-                    
+
                     if (data.status === 'success') {
                         this.showSessionSummary(data.summary);
                     }
@@ -1224,6 +1249,11 @@
             
             showSessionSummary(summary) {
                 const summaryContainer = document.getElementById('session-summary');
+
+                const durationText = summary.session_duration
+                    ? `<p><strong>Duration:</strong> ${summary.session_duration} minutes</p>`
+                    : '';
+
                 summaryContainer.innerHTML = `
                     <div class="text-center">
                         <h4>Presentation Session Complete!</h4>
@@ -1236,6 +1266,7 @@
                                         <p><strong>Report Type:</strong> ${summary.presentation_topic}</p>
                                         <p><strong>Session Type:</strong> ${summary.session_type === 'questions' ? 'Question-based' : 'Time-based'}</p>
                                         <p><strong>Limit:</strong> ${summary.session_limit} ${summary.session_type === 'questions' ? 'questions' : 'minutes'}</p>
+                                        ${durationText}
                                     </div>
                                 </div>
                             </div>
@@ -1260,15 +1291,25 @@
                 this.currentExecutive = null;
                 this.reportUploaded = false;
                 this.sessionEnding = false;
-                
+                this.sessionType = 'questions';
+                this.timeLimit = null;
+                this.sessionStartTime = null;
+
+                // Stop and hide timer
+                this.stopSessionTimer();
+                const timerElement = document.getElementById('session-timer');
+                if (timerElement) {
+                    timerElement.style.display = 'none';
+                }
+
                 document.getElementById('setup-form').reset();
                 document.querySelectorAll('.executive-card input[type="checkbox"]').forEach(checkbox => {
                     checkbox.checked = false;
                 });
-                
+
                 // Reset session type display
                 this.toggleSessionType('questions');
-                
+
                 this.showPhase('setup');
             }
             
@@ -1276,6 +1317,72 @@
                 const conversationArea = document.getElementById('conversation-area');
                 conversationArea.scrollTop = conversationArea.scrollHeight;
             }
+
+            startSessionTimer() {
+                const timerElement = document.getElementById('session-timer');
+                const timerDisplay = document.getElementById('timer-display');
+
+                if (!timerElement || !this.timeLimit) return;
+
+                timerElement.style.display = 'block';
+
+                this.timerInterval = setInterval(() => {
+                    const elapsed = (new Date() - this.sessionStartTime) / 1000; // seconds
+                    const remaining = (this.timeLimit * 60) - elapsed; // seconds remaining
+
+                    if (remaining <= 0) {
+                        timerDisplay.textContent = '0:00';
+                        timerDisplay.parentElement.classList.remove('bg-light', 'text-dark');
+                        timerDisplay.parentElement.classList.add('bg-danger', 'text-white');
+                        this.stopSessionTimer();
+
+                        // Auto-end session when time runs out
+                        if (!this.sessionEnding) {
+                            this.showTimeExpiredMessage();
+                        }
+                        return;
+                    }
+
+                    const minutes = Math.floor(remaining / 60);
+                    const seconds = Math.floor(remaining % 60);
+                    timerDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+                    // Change color when less than 1 minute remains
+                    if (remaining <= 60) {
+                        timerDisplay.parentElement.classList.remove('bg-light', 'text-dark');
+                        timerDisplay.parentElement.classList.add('bg-warning', 'text-dark');
+                    } else if (remaining <= 30) {
+                        timerDisplay.parentElement.classList.remove('bg-warning', 'bg-light', 'text-dark');
+                        timerDisplay.parentElement.classList.add('bg-danger', 'text-white');
+                    }
+                }, 1000);
+            }
+
+            stopSessionTimer() {
+                if (this.timerInterval) {
+                    clearInterval(this.timerInterval);
+                    this.timerInterval = null;
+                }
+            }
+
+            showTimeExpiredMessage() {
+                this.sessionEnding = true;
+                this.hideResponseArea();
+
+                const conversationArea = document.getElementById('conversation-area');
+                const timeExpiredElement = document.createElement('div');
+                timeExpiredElement.className = 'alert alert-warning text-center mt-3';
+                timeExpiredElement.innerHTML = `
+                    <h5><i class="fas fa-clock"></i> Time's Up!</h5>
+                    <p>Your ${this.timeLimit}-minute session has ended. The panel thanks you for your presentation.</p>
+                    <button class="btn btn-primary" onclick="simulator.endSession()">
+                        View Summary & Feedback
+                    </button>
+                `;
+                conversationArea.appendChild(timeExpiredElement);
+                this.scrollToBottom();
+            }
+
             // ✅ ADD THESE TWO NEW METHODS HERE:
             async speakQuestion(question) {
                 if (!this.ttsEnabled) {

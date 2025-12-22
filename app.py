@@ -216,6 +216,29 @@ def get_next_executive(selected_executives, current_count):
     index = (current_count - 1) % len(selected_executives)
     return selected_executives[index]
 
+def check_time_limit_exceeded(session_data):
+    """Check if time-based session has exceeded its limit"""
+    if not session_data:
+        return False
+
+    session_type = session_data.get('session_type', 'questions')
+    if session_type != 'time':
+        return False
+
+    time_limit = session_data.get('time_limit')
+    session_start_time = session_data.get('session_start_time')
+
+    if not time_limit or not session_start_time:
+        return False
+
+    try:
+        start_time = datetime.fromisoformat(session_start_time)
+        elapsed_minutes = (datetime.now(CST) - start_time).total_seconds() / 60
+        return elapsed_minutes >= time_limit
+    except Exception as e:
+        print(f"Error checking time limit: {e}")
+        return False
+
 # Question Generation
 def generate_ai_questions_with_topic_diversity(report_content, executive, company_name, 
                                                industry, report_type, all_key_details, 
@@ -376,7 +399,9 @@ def upload_report():
         industry = request.form.get('industry', 'Technology')
         report_type = request.form.get('report_type', 'Business Plan')
         selected_executives = request.form.getlist('executives[]')
-        
+        session_type = request.form.get('session_type', 'questions')
+        time_limit = int(request.form.get('time_limit', 10)) if session_type == 'time' else None
+
         if not selected_executives:
             return jsonify({'status': 'error', 'error': 'Please select at least one executive'})
         
@@ -424,7 +449,10 @@ def upload_report():
             'responses': [],
             'used_topics': [first_topic],
             'current_question_count': 1,
-            'question_limit': int(request.form.get('question_limit', 10))
+            'question_limit': int(request.form.get('question_limit', 10)),
+            'session_type': session_type,
+            'time_limit': time_limit,
+            'session_start_time': datetime.now(CST).isoformat()
         }
         
         store_session_data(session_data)
@@ -477,11 +505,18 @@ def respond_to_executive():
         current_count = session_data.get('current_question_count', 0)
         question_limit = session_data.get('question_limit', 10)
         selected_executives = session_data.get('selected_executives', [])
-        
+        session_type = session_data.get('session_type', 'questions')
+
         next_count = current_count + 1
-        
+
         # ========== STEP 5: Check if session should end ==========
-        if next_count > question_limit:
+        should_end = False
+        if session_type == 'questions' and next_count > question_limit:
+            should_end = True
+        elif session_type == 'time' and check_time_limit_exceeded(session_data):
+            should_end = True
+
+        if should_end:
             print(f"✅ Session complete ({current_count}/{question_limit}), sending closing message")
             
             company_name = session_data.get('company_name', 'Your Company')
@@ -613,11 +648,18 @@ def respond_to_executive_audio():
         current_count = session_data.get('current_question_count', 0)
         question_limit = session_data.get('question_limit', 10)
         selected_executives = session_data.get('selected_executives', [])
-        
+        session_type = session_data.get('session_type', 'questions')
+
         next_count = current_count + 1
-        
+
         # ========== STEP 6: Check if session should end ==========
-        if next_count > question_limit:
+        should_end = False
+        if session_type == 'questions' and next_count > question_limit:
+            should_end = True
+        elif session_type == 'time' and check_time_limit_exceeded(session_data):
+            should_end = True
+
+        if should_end:
             print(f"✅ Session complete ({current_count}/{question_limit}), sending closing message")
             
             company_name = session_data.get('company_name', 'Your Company')
@@ -781,17 +823,32 @@ def end_session():
             exec_name = q.get('name', 'Unknown')
             if exec_name not in executives_involved:
                 executives_involved.append(exec_name)
-        
+
+        session_type = session_data.get('session_type', 'questions')
+        time_limit = session_data.get('time_limit', 10)
+        session_start_time = session_data.get('session_start_time')
+
+        # Calculate actual session duration
+        session_duration = None
+        if session_start_time:
+            try:
+                start_time = datetime.fromisoformat(session_start_time)
+                duration_seconds = (datetime.now(CST) - start_time).total_seconds()
+                session_duration = round(duration_seconds / 60, 1)  # Convert to minutes
+            except:
+                pass
+
         summary = {
             'company_name': company_name,
             'presentation_topic': report_type,
-            'session_type': 'questions',
-            'session_limit': question_limit,
+            'session_type': session_type,
+            'session_limit': time_limit if session_type == 'time' else question_limit,
+            'session_duration': session_duration,
             'total_questions': len(questions),
             'total_responses': len(responses),
             'audio_responses': audio_count,
             'text_responses': text_count,
-            'executives_involved': executives_involved  # ✅ Added this field
+            'executives_involved': executives_involved
         }
         
         return jsonify({
