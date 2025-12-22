@@ -718,6 +718,7 @@
                 this.timeLimit = null;
                 this.sessionStartTime = null;
                 this.timerInterval = null;
+                this.timeExpired = false;
                 this.init();
                 this.isSpeaking = false;  // ✅ Add this flag
                 // ✅ ADD THESE NEW PROPERTIES:
@@ -1294,6 +1295,7 @@
                 this.sessionType = 'questions';
                 this.timeLimit = null;
                 this.sessionStartTime = null;
+                this.timeExpired = false;
 
                 // Stop and hide timer
                 this.stopSessionTimer();
@@ -1331,14 +1333,14 @@
                     const remaining = (this.timeLimit * 60) - elapsed; // seconds remaining
 
                     if (remaining <= 0) {
-                        timerDisplay.textContent = '0:00';
-                        timerDisplay.parentElement.classList.remove('bg-light', 'text-dark');
+                        timerDisplay.textContent = 'OVERTIME';
+                        timerDisplay.parentElement.classList.remove('bg-light', 'text-dark', 'bg-warning');
                         timerDisplay.parentElement.classList.add('bg-danger', 'text-white');
-                        this.stopSessionTimer();
 
-                        // Auto-end session when time runs out
-                        if (!this.sessionEnding) {
-                            this.showTimeExpiredMessage();
+                        // Mark time as expired but don't end session yet
+                        if (!this.timeExpired) {
+                            this.timeExpired = true;
+                            this.showTimeExpiredWarning();
                         }
                         return;
                     }
@@ -1365,21 +1367,21 @@
                 }
             }
 
-            showTimeExpiredMessage() {
-                this.sessionEnding = true;
-                this.hideResponseArea();
-
+            showTimeExpiredWarning() {
+                // Show a non-intrusive warning but allow user to finish current question
                 const conversationArea = document.getElementById('conversation-area');
-                const timeExpiredElement = document.createElement('div');
-                timeExpiredElement.className = 'alert alert-warning text-center mt-3';
-                timeExpiredElement.innerHTML = `
-                    <h5><i class="fas fa-clock"></i> Time's Up!</h5>
-                    <p>Your ${this.timeLimit}-minute session has ended. The panel thanks you for your presentation.</p>
-                    <button class="btn btn-primary" onclick="simulator.endSession()">
-                        View Summary & Feedback
-                    </button>
+
+                // Only show warning once
+                if (document.getElementById('time-warning')) return;
+
+                const timeWarningElement = document.createElement('div');
+                timeWarningElement.id = 'time-warning';
+                timeWarningElement.className = 'alert alert-warning text-center mt-3';
+                timeWarningElement.innerHTML = `
+                    <h6><i class="fas fa-clock"></i> Time Limit Reached</h6>
+                    <p class="mb-0">Please finish your current response. The session will end after you submit.</p>
                 `;
-                conversationArea.appendChild(timeExpiredElement);
+                conversationArea.appendChild(timeWarningElement);
                 this.scrollToBottom();
             }
 
