@@ -1304,9 +1304,15 @@
             
             async endSession() {
                 try {
+                    // Stop any playing audio
+                    if (this.audioElement) {
+                        this.audioElement.pause();
+                        this.audioElement.src = '';
+                    }
+
                     const response = await fetch('/end_session', { method: 'POST' });
                     const data = await response.json();
-                    
+
                     if (data.status === 'success') {
                         this.showSessionSummary(data.summary);
                     }
