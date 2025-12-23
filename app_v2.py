@@ -211,7 +211,7 @@ Extract 12-15 diverse key details that cover different business areas:
 - Data from charts, graphs, and visualizations
 
 Format each as a brief statement (1-2 sentences max).
-Return as a JSON array of strings.
+Return ONLY a JSON object with this structure: {{"key_details": ["detail1", "detail2", ...]}}
 
 Document:
 {combined_content}"""
@@ -219,14 +219,16 @@ Document:
         response = openai_client.chat.completions.create(
             model="gpt-4-turbo-preview",
             messages=[
-                {"role": "system", "content": "You are an expert business analyst who excels at extracting key insights from business documents and visualizations."},
+                {"role": "system", "content": "You are an expert business analyst. You must return only valid JSON."},
                 {"role": "user", "content": prompt}
             ],
+            response_format={"type": "json_object"},
             temperature=0.7,
             max_tokens=1000
         )
 
-        key_details = json.loads(response.choices[0].message.content)
+        result = json.loads(response.choices[0].message.content)
+        key_details = result.get('key_details', [])
         print(f"📊 Extracted {len(key_details)} key details from document")
         return key_details[:15]
 
@@ -387,11 +389,18 @@ The presenter responded: "{response_text}"
 
 Analyze if this response adequately addresses the question. Consider if you (the {executive}) would have a natural follow-up question to clarify or dig deeper.
 
-Respond with JSON:
+Return ONLY a JSON object with this exact structure:
 {{
-    "needs_followup": true/false,
-    "reason": "brief reason",
-    "followup_question": "the follow-up question" or null
+    "needs_followup": true,
+    "reason": "brief reason why followup is needed",
+    "followup_question": "the specific follow-up question"
+}}
+
+OR if no follow-up is needed:
+{{
+    "needs_followup": false,
+    "reason": "response was adequate",
+    "followup_question": null
 }}
 
 Only request a follow-up if the response is vague, incomplete, or raises new concerns."""
@@ -399,9 +408,10 @@ Only request a follow-up if the response is vague, incomplete, or raises new con
         response = openai_client.chat.completions.create(
             model="gpt-4-turbo-preview",
             messages=[
-                {"role": "system", "content": "You are an executive deciding if clarification is needed."},
+                {"role": "system", "content": "You are an executive deciding if clarification is needed. You must return only valid JSON."},
                 {"role": "user", "content": prompt}
             ],
+            response_format={"type": "json_object"},
             temperature=0.7,
             max_tokens=200
         )
