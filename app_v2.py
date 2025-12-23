@@ -108,14 +108,14 @@ def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
     try:
         print(f"🔍 Analyzing PDF with Vision API...")
 
-        # Convert PDF to images (first 10 pages to manage costs)
-        images = convert_from_path(pdf_path, first_page=1, last_page=10)
+        # Convert PDF to images (first 3 pages to manage costs and time)
+        images = convert_from_path(pdf_path, first_page=1, last_page=3)
         print(f"📄 Converted {len(images)} pages to images")
 
         all_analysis = []
 
         # Analyze each page with Vision API
-        for i, img in enumerate(images[:5], 1):  # Limit to first 5 pages for cost
+        for i, img in enumerate(images[:3], 1):  # Limit to first 3 pages for speed
             print(f"   Analyzing page {i}...")
 
             # Convert PIL Image to bytes
@@ -126,9 +126,9 @@ def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
             # Encode image to base64
             img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
 
-            # Call Vision API
+            # Call Vision API (using gpt-4o which supports vision)
             response = openai_client.chat.completions.create(
-                model="gpt-4-vision-preview",
+                model="gpt-4o",
                 messages=[
                     {
                         "role": "user",
@@ -140,13 +140,14 @@ def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
                             {
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": f"data:image/png;base64,{img_base64}"
+                                    "url": f"data:image/png;base64,{img_base64}",
+                                    "detail": "low"  # Use "low" for faster processing
                                 }
                             }
                         ]
                     }
                 ],
-                max_tokens=800
+                max_tokens=500  # Reduced for faster response
             )
 
             page_analysis = response.choices[0].message.content
