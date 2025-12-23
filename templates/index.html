@@ -203,8 +203,8 @@
         }
         
         .executive-member .avatar {
-            width: 35px;
-            height: 35px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -212,6 +212,14 @@
             color: white;
             font-size: 0.9rem;
             margin-right: 0.75rem;
+            overflow: hidden;
+            border: 3px solid #dee2e6;
+        }
+
+        .executive-member .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         
         .executive-member .info .name {
@@ -1018,20 +1026,20 @@
                 executiveList.innerHTML = '';
                 
                 const executives = {
-                    'CEO': { name: 'Sarah Chen', icon: 'fa-crown' },
-                    'CFO': { name: 'Michael Rodriguez', icon: 'fa-chart-line' },
-                    'CTO': { name: 'Dr. Lisa Kincaid', icon: 'fa-microchip' },
-                    'CMO': { name: 'James Thompson', icon: 'fa-bullhorn' },
-                    'COO': { name: 'Rebecca Johnson', icon: 'fa-cogs' }
+                    'CEO': { name: 'Sarah Chen', image: 'sarah_chen' },
+                    'CFO': { name: 'Michael Rodriguez', image: 'michael_rodriguez' },
+                    'CTO': { name: 'Dr. Lisa Kincaid', image: 'lisa_kincaid' },
+                    'CMO': { name: 'James Thompson', image: 'james_thompson' },
+                    'COO': { name: 'Rebecca Johnson', image: 'rebecca_johnson' }
                 };
-                
+
                 this.selectedExecutives.forEach(role => {
                     const exec = executives[role];
                     const execElement = document.createElement('div');
                     execElement.className = 'executive-member';
                     execElement.innerHTML = `
                         <div class="avatar avatar-${role}">
-                            <i class="fas ${exec.icon}"></i>
+                            <img src="/static/images/executives/${exec.image}.png" alt="${exec.name}" onerror="this.style.display='none'">
                         </div>
                         <div class="info">
                             <div class="name">${exec.name}</div>
