@@ -15,14 +15,17 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, Response
 from werkzeug.utils import secure_filename
 import PyPDF2
+import fitz  # PyMuPDF
+import pdfplumber
 import openai
 import pytz
 import base64
 import requests
 from bs4 import BeautifulSoup
-from pdf2image import convert_from_path
+from pdf2image import convert_from_path, convert_from_bytes
 from PIL import Image
 import io
+from io import BytesIO
 import json
 
 # Import database module
@@ -166,9 +169,244 @@ def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
         traceback.print_exc()
         return None, None
 
-# ========== PDF Processing ==========
+# ========== Enhanced PDF Processing with PyMuPDF + pdfplumber ==========
+def extract_text_and_images_with_pymupdf(pdf_bytes):
+    """Extract text and images using PyMuPDF (fast and comprehensive)"""
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        text_content = ""
+        images = []
+
+        print(f"📄 Processing {len(doc)} pages with PyMuPDF...")
+
+        for page_num, page in enumerate(doc):
+            # Extract text with better formatting
+            page_text = page.get_text("text")
+            text_content += f"\n--- Page {page_num + 1} ---\n{page_text}"
+
+            # Extract images from this page
+            image_list = page.get_images()
+            for img_index, img in enumerate(image_list):
+                try:
+                    xref = img[0]
+                    base_image = doc.extract_image(xref)
+                    image_bytes = base_image["image"]
+                    image_ext = base_image["ext"]
+
+                    images.append({
+                        'page': page_num + 1,
+                        'index': img_index,
+                        'bytes': image_bytes,
+                        'ext': image_ext,
+                        'size': len(image_bytes)
+                    })
+                except Exception as e:
+                    print(f"⚠️ Could not extract image {img_index} from page {page_num + 1}: {e}")
+
+        print(f"✅ PyMuPDF: Extracted {len(text_content)} chars of text and {len(images)} images")
+        return text_content.strip(), images
+
+    except Exception as e:
+        print(f"❌ PyMuPDF extraction error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None, []
+
+def extract_tables_with_pdfplumber(pdf_bytes):
+    """Extract tables using pdfplumber (best table detection)"""
+    try:
+        tables_data = []
+
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            print(f"📊 Scanning {len(pdf.pages)} pages for tables with pdfplumber...")
+
+            for page_num, page in enumerate(pdf.pages):
+                tables = page.extract_tables()
+
+                if tables:
+                    for table_index, table in enumerate(tables):
+                        if table and len(table) > 0:
+                            tables_data.append({
+                                'page': page_num + 1,
+                                'index': table_index,
+                                'data': table,
+                                'rows': len(table),
+                                'cols': len(table[0]) if table else 0
+                            })
+
+        print(f"✅ pdfplumber: Found {len(tables_data)} tables")
+        return tables_data
+
+    except Exception as e:
+        print(f"❌ pdfplumber table extraction error: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+def analyze_images_with_vision(images, max_images=5):
+    """Analyze important embedded images using OpenAI Vision API"""
+    if not openai_available or not openai_client:
+        print("⚠️ OpenAI not available - skipping image analysis")
+        return []
+
+    if not images:
+        return []
+
+    try:
+        # Sort images by size and take the largest ones (likely most important)
+        sorted_images = sorted(images, key=lambda x: x['size'], reverse=True)
+        images_to_analyze = sorted_images[:max_images]
+
+        print(f"🖼️ Analyzing {len(images_to_analyze)} embedded images with Vision API...")
+
+        image_descriptions = []
+
+        for img in images_to_analyze:
+            try:
+                # Convert image bytes to base64
+                img_b64 = base64.b64encode(img['bytes']).decode('utf-8')
+
+                # Determine image format
+                mime_type = f"image/{img['ext']}" if img['ext'] in ['png', 'jpeg', 'jpg', 'gif', 'webp'] else "image/png"
+
+                # Analyze with Vision API
+                response = openai_client.chat.completions.create(
+                    model="gpt-4o",  # Using GPT-4o for vision
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Analyze this image from a business report. Describe what it shows (chart, graph, diagram, etc.), extract any visible data or trends, and explain its business significance. Be concise but thorough."
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{mime_type};base64,{img_b64}",
+                                    "detail": "high"
+                                }
+                            }
+                        ]
+                    }],
+                    max_tokens=500
+                )
+
+                description = response.choices[0].message.content
+                image_descriptions.append({
+                    'page': img['page'],
+                    'description': description
+                })
+
+                print(f"✅ Analyzed embedded image from page {img['page']}")
+
+            except Exception as e:
+                print(f"⚠️ Could not analyze image from page {img['page']}: {e}")
+
+        return image_descriptions
+
+    except Exception as e:
+        print(f"❌ Vision API error: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+def format_tables_for_analysis(tables_data):
+    """Format extracted tables into readable text for AI analysis"""
+    if not tables_data:
+        return "No tables found in document."
+
+    formatted = f"\n\n=== TABLES EXTRACTED ({len(tables_data)} found) ===\n"
+
+    for table_info in tables_data:
+        formatted += f"\n--- Table on Page {table_info['page']} ({table_info['rows']} rows × {table_info['cols']} cols) ---\n"
+
+        table = table_info['data']
+        # Format as markdown-style table
+        for row_idx, row in enumerate(table[:10]):  # Limit to first 10 rows per table
+            if row:
+                formatted += " | ".join([str(cell) if cell else "" for cell in row]) + "\n"
+
+        if len(table) > 10:
+            formatted += f"... ({len(table) - 10} more rows)\n"
+
+    return formatted
+
+def format_images_for_analysis(image_descriptions):
+    """Format image descriptions for AI analysis"""
+    if not image_descriptions:
+        return "No embedded images analyzed."
+
+    formatted = f"\n\n=== IMAGES/CHARTS ANALYZED ({len(image_descriptions)} found) ===\n"
+
+    for img in image_descriptions:
+        formatted += f"\n--- Image/Chart on Page {img['page']} ---\n"
+        formatted += f"{img['description']}\n"
+
+    return formatted
+
+def comprehensive_pdf_extraction(pdf_file, analyze_images_flag=True):
+    """
+    Comprehensive PDF extraction combining PyMuPDF, pdfplumber, and Vision API
+
+    Returns:
+        dict: {
+            'text': str,
+            'tables': list,
+            'images': list,
+            'image_descriptions': list,
+            'combined_content': str  # Formatted for AI analysis
+        }
+    """
+    print("\n" + "="*60)
+    print("🚀 Starting Comprehensive PDF Extraction")
+    print("="*60)
+
+    # Read PDF bytes once
+    pdf_file.seek(0)
+    pdf_bytes = pdf_file.read()
+
+    # Step 1: Extract text and images with PyMuPDF
+    pdf_file.seek(0)
+    text_content, images = extract_text_and_images_with_pymupdf(pdf_bytes)
+
+    # Step 2: Extract tables with pdfplumber
+    tables_data = extract_tables_with_pdfplumber(pdf_bytes)
+
+    # Step 3: Analyze embedded images with Vision API (optional, can be disabled for cost savings)
+    image_descriptions = []
+    if analyze_images_flag and images:
+        image_descriptions = analyze_images_with_vision(images, max_images=5)
+
+    # Step 4: Combine everything into formatted content for AI analysis
+    combined_content = f"""
+=== DOCUMENT TEXT CONTENT ===
+{text_content[:12000]}
+{"... (content truncated for length)" if len(text_content) > 12000 else ""}
+
+{format_tables_for_analysis(tables_data)}
+
+{format_images_for_analysis(image_descriptions)}
+"""
+
+    print("\n" + "="*60)
+    print("✅ Comprehensive PDF Extraction Complete")
+    print(f"   📝 Text: {len(text_content)} characters")
+    print(f"   📊 Tables: {len(tables_data)} found")
+    print(f"   🖼️ Images: {len(images)} extracted, {len(image_descriptions)} analyzed")
+    print(f"   📦 Combined content: {len(combined_content)} characters")
+    print("="*60 + "\n")
+
+    return {
+        'text': text_content,
+        'tables': tables_data,
+        'images': images,
+        'image_descriptions': image_descriptions,
+        'combined_content': combined_content
+    }
+
+# ========== Legacy PDF Processing (kept for backward compatibility) ==========
 def extract_text_from_pdf(pdf_file):
-    """Extract text content from uploaded PDF file"""
+    """Extract text content from uploaded PDF file (Legacy - use comprehensive_pdf_extraction instead)"""
     try:
         pdf_reader = PyPDF2.PdfReader(pdf_file)
         text_content = ""
@@ -187,28 +425,36 @@ def extract_text_from_pdf(pdf_file):
 def analyze_document_with_ai(document_text, vision_analysis, company_name, industry, report_type):
     """
     Use OpenAI to extract key details from document
-    Now enhanced with vision analysis for comprehensive understanding
+    Enhanced with vision analysis and comprehensive content (text + tables + images)
     """
     if not openai_available or not openai_client:
         return generate_template_key_details(company_name, industry, report_type)
 
     try:
-        # Combine text and vision analysis
-        combined_content = f"TEXT CONTENT:\n{document_text[:3000]}\n\n"
+        # Combine text and vision analysis with increased limits for richer content
+        combined_content = f"TEXT CONTENT:\n{document_text[:16000]}\n\n"
         if vision_analysis:
-            combined_content += f"VISUAL ANALYSIS:\n{vision_analysis[:2000]}"
+            combined_content += f"VISUAL ANALYSIS:\n{vision_analysis[:4000]}"
 
         prompt = f"""Analyze this {report_type} document for {company_name} in the {industry} industry.
 
+This document includes extracted text content, structured tables, and analyzed images/charts.
+
 Extract 12-15 diverse key details that cover different business areas:
-- Financial aspects (revenue, costs, profitability, projections)
+- Financial aspects (revenue, costs, profitability, projections) - pay special attention to tables and charts
 - Market analysis and competition
 - Core resources, capabilities and competencies
 - Operations and processes
 - Technology and innovation
 - Strategic initiatives and goals
 - Risks and challenges
-- Data from charts, graphs, and visualizations
+- Data insights from charts, graphs, and visual elements
+
+When extracting details:
+- Reference specific data from tables when available
+- Include insights from charts and visual elements
+- Cite specific metrics and numbers when present
+- Capture strategic implications
 
 Format each as a brief statement (1-2 sentences max).
 Return ONLY a JSON object with this structure: {{"key_details": ["detail1", "detail2", ...]}}
@@ -219,21 +465,23 @@ Document:
         response = openai_client.chat.completions.create(
             model="gpt-4-turbo-preview",
             messages=[
-                {"role": "system", "content": "You are an expert business analyst. You must return only valid JSON."},
+                {"role": "system", "content": "You are an expert business analyst skilled at extracting insights from text, tables, charts, and visual data. You must return only valid JSON."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
             temperature=0.7,
-            max_tokens=1000
+            max_tokens=1500
         )
 
         result = json.loads(response.choices[0].message.content)
         key_details = result.get('key_details', [])
-        print(f"📊 Extracted {len(key_details)} key details from document")
+        print(f"📊 Extracted {len(key_details)} key details from comprehensive document analysis")
         return key_details[:15]
 
     except Exception as e:
         print(f"AI analysis error: {e}")
+        import traceback
+        traceback.print_exc()
         return generate_template_key_details(company_name, industry, report_type)
 
 def generate_template_key_details(company_name, industry, report_type):
@@ -590,25 +838,30 @@ def upload_report():
         file.save(temp_pdf_path)
 
         try:
-            # Extract text from PDF
+            # Extract comprehensive content from PDF (text, tables, embedded images)
             file.seek(0)  # Reset file pointer
-            report_text = extract_text_from_pdf(file)
+            extraction_result = comprehensive_pdf_extraction(file, analyze_images_flag=True)
 
-            if not report_text:
-                return jsonify({'status': 'error', 'error': 'Could not extract text from PDF'})
+            if not extraction_result or not extraction_result['combined_content']:
+                return jsonify({'status': 'error', 'error': 'Could not extract content from PDF'})
 
-            print(f"✅ Extracted {len(report_text)} characters from PDF")
+            # Get the enriched combined content (includes text, tables, and embedded image analysis)
+            report_text = extraction_result['combined_content']
 
-            # NEW: Analyze with Vision API for charts/visualizations
+            print(f"✅ Comprehensive extraction complete: {len(report_text)} characters")
+            print(f"   📊 Tables: {len(extraction_result['tables'])}, 🖼️ Images: {len(extraction_result['images'])} (analyzed: {len(extraction_result['image_descriptions'])})")
+
+            # OPTIONAL: Also analyze full PDF pages with Vision API for additional context
+            # This adds full-page visual analysis on top of embedded image analysis
             vision_analysis = None
             vision_analysis, page_count = analyze_pdf_with_vision(
                 temp_pdf_path, company_name, industry, report_type
             )
 
-            # Combine text and vision analysis for storage
-            full_content = f"TEXT:\n{report_text}\n\n"
+            # Combine comprehensive extraction with optional full-page vision analysis
+            full_content = report_text  # Already includes text + tables + embedded images
             if vision_analysis:
-                full_content += f"VISUAL ANALYSIS:\n{vision_analysis}"
+                full_content += f"\n\nADDITIONAL PAGE-LEVEL VISUAL ANALYSIS:\n{vision_analysis}"
 
             # NEW: Optional web research
             company_research = None
