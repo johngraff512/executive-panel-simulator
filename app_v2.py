@@ -495,7 +495,7 @@ def generate_template_key_details(company_name, industry, report_type):
         f"Growth strategy and expansion plans",
         f"Key partnerships and strategic alliances",
         f"Market share and customer acquisition",
-        f"Risk factors and mitigation strategies",
+        f"Risk factors and mitigation approaches",
         f"Innovation initiatives and R&D investments",
         f"Sustainability and ESG considerations",
         f"Financial projections and performance metrics"
@@ -597,12 +597,18 @@ Generate ONE challenging, specific question about this aspect. The question shou
 - Be answerable based on a strategic business plan
 - Be 1-2 sentences max
 
+IMPORTANT - Strategic Management terminology:
+- Use "strategy" (singular) when referring to the overall business strategy or integrated set of choices
+- Use "strategic initiatives", "actions", or "initiatives" when referring to specific programs or activities
+- Avoid using "strategies" (plural) to refer to individual actions or tactics
+- Examples: "What strategic initiatives..." ✓  "What strategies are you implementing..." ✗
+
 Return ONLY the question text, no preamble."""
 
         response = openai_client.chat.completions.create(
             model="gpt-4-turbo-preview",
             messages=[
-                {"role": "system", "content": f"You are the {executive} asking tough business questions."},
+                {"role": "system", "content": f"You are the {executive} asking tough business questions. Use precise strategic management terminology: 'strategy' for overall direction, 'strategic initiatives' or 'actions' for specific programs."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.8,
