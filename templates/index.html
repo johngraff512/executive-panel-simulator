@@ -1260,7 +1260,7 @@
                                     </div>
                                     <small class="text-muted tw-mt-2 tw-block">
                                         <i class="fas fa-spinner fa-spin tw-mr-2"></i>
-                                        Analyzing your report with AI... This may take 20-30 seconds for comprehensive PDF analysis (text, tables, images).
+                                        Analyzing your report with AI... This may take 1-3 minutes for comprehensive PDF analysis (text, tables, images, and optional web research).
                                     </small>
                                 </div>
                             </div>
@@ -1269,6 +1269,71 @@
                 </form>
             </div>
         </div>
+
+        <!-- Ready to Launch Phase -->
+        <div id="ready-phase" class="phase">
+            <div class="wizard-container">
+                <div class="card shadow-sm">
+                    <div class="card-body text-center" style="padding: 3rem 2rem;">
+                        <div class="tw-mb-6">
+                            <i class="fas fa-check-circle" style="font-size: 5rem; color: #28a745;"></i>
+                        </div>
+                        <h2 class="tw-text-3xl tw-font-bold tw-mb-4" style="color: var(--charcoal);">
+                            Your Panel is Ready!
+                        </h2>
+                        <p class="tw-text-lg tw-mb-4" style="color: #6c757d;">
+                            We've analyzed your report and prepared the executive panel for your presentation.
+                        </p>
+
+                        <div class="row justify-content-center tw-mb-6">
+                            <div class="col-md-8">
+                                <div class="tw-p-4 tw-bg-gray-50 tw-rounded-lg tw-mb-4">
+                                    <h5 class="tw-font-semibold tw-mb-3">
+                                        <i class="fas fa-info-circle tw-mr-2"></i>
+                                        What to Expect
+                                    </h5>
+                                    <ul class="list-unstyled tw-text-left" style="color: #495057;">
+                                        <li class="tw-mb-2">
+                                            <i class="fas fa-check tw-mr-2" style="color: var(--texas-orange);"></i>
+                                            Executives will ask questions based on your report content
+                                        </li>
+                                        <li class="tw-mb-2">
+                                            <i class="fas fa-check tw-mr-2" style="color: var(--texas-orange);"></i>
+                                            You can respond via text or voice
+                                        </li>
+                                        <li class="tw-mb-2">
+                                            <i class="fas fa-check tw-mr-2" style="color: var(--texas-orange);"></i>
+                                            Questions will be read aloud by AI voice
+                                        </li>
+                                        <li class="tw-mb-2">
+                                            <i class="fas fa-check tw-mr-2" style="color: var(--texas-orange);"></i>
+                                            Session will end after <span id="ready-question-count">10</span> questions
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="tw-p-4 tw-bg-blue-50 tw-rounded-lg tw-mb-4">
+                                    <p class="tw-mb-0" style="color: #0c5460;">
+                                        <i class="fas fa-lightbulb tw-mr-2"></i>
+                                        <strong>Tip:</strong> Take a moment to review your notes and prepare yourself before starting.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <button id="launch-panel-btn" class="btn btn-primary btn-lg" style="padding: 1rem 3rem; font-size: 1.25rem;">
+                                <i class="fas fa-rocket tw-mr-2"></i>
+                                Launch Executive Panel
+                            </button>
+                            <br>
+                            <small class="text-muted tw-mt-2 tw-block">Click when you're ready to begin</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Simulation Phase -->
         <div id="simulation-phase" class="phase">
             <div class="row">
@@ -1402,10 +1467,22 @@
                             </div>
                             
                             <div class="mt-4 text-center">
-                                <button id="new-session-btn" class="btn btn-primary btn-lg">
-                                    <i class="fas fa-redo"></i>
-                                    Start New Session
-                                </button>
+                                <div class="row justify-content-center">
+                                    <div class="col-md-6 mb-3">
+                                        <button id="same-company-session-btn" class="btn btn-outline-primary btn-lg w-100">
+                                            <i class="fas fa-redo"></i>
+                                            Same Company, New Panel
+                                        </button>
+                                        <small class="text-muted d-block mt-2">Keep same report, select different executives</small>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <button id="new-session-btn" class="btn btn-primary btn-lg w-100">
+                                            <i class="fas fa-plus-circle"></i>
+                                            Start Completely Over
+                                        </button>
+                                        <small class="text-muted d-block mt-2">Upload new report and start fresh</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1846,11 +1923,21 @@
                     this.endSession();
                 });
                 
-                // New session
+                // New session - completely start over
                 document.getElementById('new-session-btn').addEventListener('click', () => {
                     this.newSession();
                 });
-                
+
+                // Same company, new panel
+                document.getElementById('same-company-session-btn').addEventListener('click', () => {
+                    this.sameCompanyNewSession();
+                });
+
+                // Launch panel button (from ready screen)
+                document.getElementById('launch-panel-btn').addEventListener('click', () => {
+                    this.launchPanel();
+                });
+
                 // Executive selection
                 document.querySelectorAll('.executive-card input[type="checkbox"]').forEach(checkbox => {
                     checkbox.addEventListener('change', () => {
@@ -1968,8 +2055,18 @@
                     if (data.status === 'success') {
                         this.hideUploadProgress();
                         this.reportUploaded = true;
-                        this.setupSimulationPhase();
-                        this.startPresentation(data.first_question);
+
+                        // Store first question data for when user clicks "Launch Panel"
+                        this.firstQuestionData = data.first_question;
+
+                        // Update ready screen with question count
+                        const questionCountElement = document.getElementById('ready-question-count');
+                        if (questionCountElement) {
+                            questionCountElement.textContent = questionLimit;
+                        }
+
+                        // Show ready screen instead of immediately launching
+                        this.showPhase('ready');
                     } else {
                         throw new Error(data.error || 'Failed to setup session');
                     }
@@ -2355,23 +2452,79 @@
                 this.showPhase('summary');
             }
             
+            sameCompanyNewSession() {
+                // Keep company data and file, just reset executive selection
+                this.selectedExecutives = [];
+                this.currentExecutive = null;
+                this.sessionEnding = false;
+
+                // Uncheck all executive cards (both old and new style)
+                document.querySelectorAll('.executive-card input[type="checkbox"], .exec-card-modern input[type="checkbox"]').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                document.querySelectorAll('.executive-card, .exec-card-modern').forEach(card => {
+                    card.classList.remove('selected');
+                });
+
+                // Update counter
+                if (typeof updateSelectionCounter === 'function') {
+                    updateSelectionCounter();
+                }
+
+                // Go to setup phase and jump to step 3 (executive selection)
+                this.showPhase('setup');
+                if (typeof goToStep === 'function') {
+                    setTimeout(() => goToStep(3), 100);
+                }
+            }
+
             newSession() {
+                // Complete reset - start from scratch
                 this.selectedExecutives = [];
                 this.currentExecutive = null;
                 this.reportUploaded = false;
                 this.sessionEnding = false;
-                
+
+                // Reset form
                 document.getElementById('setup-form').reset();
-                document.querySelectorAll('.executive-card input[type="checkbox"]').forEach(checkbox => {
+
+                // Uncheck all executive cards (both old and new style)
+                document.querySelectorAll('.executive-card input[type="checkbox"], .exec-card-modern input[type="checkbox"]').forEach(checkbox => {
                     checkbox.checked = false;
                 });
-                
+                document.querySelectorAll('.executive-card, .exec-card-modern').forEach(card => {
+                    card.classList.remove('selected');
+                });
+
+                // Reset uploaded file
+                if (typeof uploadedFile !== 'undefined') {
+                    uploadedFile = null;
+                }
+                const filePreview = document.getElementById('file-preview');
+                if (filePreview) {
+                    filePreview.classList.remove('show');
+                }
+
                 // Reset session type display
                 this.toggleSessionType('questions');
-                
+
+                // Go to setup phase and step 1
                 this.showPhase('setup');
+                if (typeof goToStep === 'function') {
+                    setTimeout(() => goToStep(1), 100);
+                }
             }
             
+            launchPanel() {
+                // Called when user clicks "Launch Panel" button from ready screen
+                if (this.firstQuestionData) {
+                    this.setupSimulationPhase();
+                    this.startPresentation(this.firstQuestionData);
+                } else {
+                    alert('Error: No question data available. Please try uploading your report again.');
+                }
+            }
+
             scrollToBottom() {
                 const conversationArea = document.getElementById('conversation-area');
                 conversationArea.scrollTop = conversationArea.scrollHeight;
