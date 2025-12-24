@@ -736,28 +736,18 @@ def generate_tts_audio(text, executive_name):
 
         print(f"🎙️ Pre-generating TTS for {executive_name}")
 
-        import signal
+        # Generate TTS (removed signal-based timeout as it conflicts with Gunicorn workers)
+        tts_response = openai_client.audio.speech.create(
+            model="tts-1",
+            voice=voice,
+            input=text[:500]
+        )
 
-        def timeout_handler(signum, frame):
-            raise TimeoutError("TTS generation timeout")
+        audio_data = base64.b64encode(tts_response.content).decode('utf-8')
+        tts_url = f"data:audio/mpeg;base64,{audio_data}"
 
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(2)
-
-        try:
-            tts_response = openai_client.audio.speech.create(
-                model="tts-1",
-                voice=voice,
-                input=text[:500]
-            )
-
-            audio_data = base64.b64encode(tts_response.content).decode('utf-8')
-            tts_url = f"data:audio/mpeg;base64,{audio_data}"
-
-            print(f"✅ TTS pre-generated ({len(audio_data)} bytes)")
-            return tts_url
-        finally:
-            signal.alarm(0)
+        print(f"✅ TTS pre-generated ({len(audio_data)} bytes)")
+        return tts_url
 
     except TimeoutError:
         print(f"⚠️ TTS timeout - skipping pre-generation")
