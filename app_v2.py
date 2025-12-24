@@ -375,13 +375,12 @@ def comprehensive_pdf_extraction(pdf_file, analyze_images_flag=True):
     # Step 3: Analyze embedded images with Vision API (optional, can be disabled for cost savings)
     image_descriptions = []
     if analyze_images_flag and images:
-        image_descriptions = analyze_images_with_vision(images, max_images=5)
+        image_descriptions = analyze_images_with_vision(images, max_images=10)
 
     # Step 4: Combine everything into formatted content for AI analysis
     combined_content = f"""
 === DOCUMENT TEXT CONTENT ===
-{text_content[:12000]}
-{"... (content truncated for length)" if len(text_content) > 12000 else ""}
+{text_content}
 
 {format_tables_for_analysis(tables_data)}
 
