@@ -423,40 +423,56 @@ def extract_text_from_pdf(pdf_file):
 
 def analyze_document_with_ai(document_text, vision_analysis, company_name, industry, report_type):
     """
-    Use OpenAI to extract key details from document
-    Enhanced with vision analysis and comprehensive content (text + tables + images)
+    Use OpenAI to extract strategic recommendations and analyses from document
+    Enhanced to identify specific proposals and analyses that can be challenged
     """
     if not openai_available or not openai_client:
         return generate_template_key_details(company_name, industry, report_type)
 
     try:
-        # Combine text and vision analysis with increased limits for richer content
-        combined_content = f"TEXT CONTENT:\n{document_text[:16000]}\n\n"
+        # Use full content - no truncation for complete analysis
+        combined_content = f"TEXT CONTENT:\n{document_text}\n\n"
         if vision_analysis:
-            combined_content += f"VISUAL ANALYSIS:\n{vision_analysis[:4000]}"
+            combined_content += f"VISUAL ANALYSIS:\n{vision_analysis}"
 
         prompt = f"""Analyze this {report_type} document for {company_name} in the {industry} industry.
 
 This document includes extracted text content, structured tables, and analyzed images/charts.
 
-Extract 12-15 diverse key details that cover different business areas:
-- Financial aspects (revenue, costs, profitability, projections) - pay special attention to tables and charts
-- Market analysis and competition
-- Core resources, capabilities and competencies
-- Operations and processes
-- Technology and innovation
-- Strategic initiatives and goals
-- Risks and challenges
-- Data insights from charts, graphs, and visual elements
+Your goal is to identify SPECIFIC STRATEGIC RECOMMENDATIONS and KEY ANALYSES that executives can challenge or clarify.
 
-When extracting details:
-- Reference specific data from tables when available
-- Include insights from charts and visual elements
-- Cite specific metrics and numbers when present
-- Capture strategic implications
+Extract 12-15 items that fall into these categories:
 
-Format each as a brief statement (1-2 sentences max).
-Return ONLY a JSON object with this structure: {{"key_details": ["detail1", "detail2", ...]}}
+1. STRATEGIC RECOMMENDATIONS (specific actions/initiatives proposed):
+   - Market entry or expansion plans
+   - Product/service development initiatives
+   - Operational improvements or changes
+   - Partnership or acquisition proposals
+   - Resource allocation decisions
+   - Format: "Recommendation: [what they propose] - [brief justification given]"
+
+2. KEY ANALYSES PERFORMED (analyses that support their strategy):
+   - Market size/opportunity calculations
+   - Competitive positioning assessments
+   - Financial projections and assumptions
+   - Customer segmentation or targeting
+   - SWOT or capability analyses
+   - Format: "Analysis: [what they analyzed] - [key finding or assumption]"
+
+3. CRITICAL ASSUMPTIONS (underlying beliefs that could be challenged):
+   - Market growth rates
+   - Customer adoption assumptions
+   - Cost or revenue assumptions
+   - Competitive response assumptions
+   - Format: "Assumption: [what they assume] - [impact if wrong]"
+
+For each item:
+- Be SPECIFIC - cite actual proposals, numbers, or findings from the document
+- Reference data from tables and charts when available
+- Make items questionable/challengeable (not just facts)
+- Include enough detail that an executive can form a tough question
+
+Return ONLY a JSON object: {{"key_details": ["detail1", "detail2", ...]}}
 
 Document:
 {combined_content}"""
@@ -464,17 +480,17 @@ Document:
         response = openai_client.chat.completions.create(
             model="gpt-4-turbo-preview",
             messages=[
-                {"role": "system", "content": "You are an expert business analyst skilled at extracting insights from text, tables, charts, and visual data. You must return only valid JSON."},
+                {"role": "system", "content": "You are an expert strategy consultant who identifies specific recommendations and analyses in business plans that executives would challenge. Extract concrete, specific items that can be questioned. You must return only valid JSON."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
             temperature=0.7,
-            max_tokens=1500
+            max_tokens=2000
         )
 
         result = json.loads(response.choices[0].message.content)
         key_details = result.get('key_details', [])
-        print(f"📊 Extracted {len(key_details)} key details from comprehensive document analysis")
+        print(f"📊 Extracted {len(key_details)} strategic recommendations and analyses for executive questioning")
         return key_details[:15]
 
     except Exception as e:
@@ -484,20 +500,20 @@ Document:
         return generate_template_key_details(company_name, industry, report_type)
 
 def generate_template_key_details(company_name, industry, report_type):
-    """Generate template key details when AI is unavailable"""
+    """Generate template key details when AI is unavailable - formatted as recommendations and analyses"""
     return [
-        f"{company_name}'s revenue model and pricing strategy",
-        f"Target market segments in {industry}",
-        f"Competitive positioning and differentiation",
-        f"Operational efficiency and cost structure",
-        f"Technology infrastructure and digital capabilities",
-        f"Growth strategy and expansion plans",
-        f"Key partnerships and strategic alliances",
-        f"Market share and customer acquisition",
-        f"Risk factors and mitigation approaches",
-        f"Innovation initiatives and R&D investments",
-        f"Sustainability and ESG considerations",
-        f"Financial projections and performance metrics"
+        f"Recommendation: {company_name} proposes entering new market segments in {industry} - based on current capabilities",
+        f"Analysis: Target market sizing and opportunity assessment - projects significant growth potential",
+        f"Recommendation: Implement new pricing strategy to improve margins - competitive positioning approach",
+        f"Assumption: Customer adoption rate will reach 25% within 18 months - critical for revenue projections",
+        f"Analysis: Competitive landscape assessment - identifies key differentiators and gaps",
+        f"Recommendation: Invest in technology infrastructure upgrades - required for scaling operations",
+        f"Analysis: Financial projections show profitability in year 2 - assumes 30% annual growth",
+        f"Assumption: Market growth rate of 15% annually - underpins revenue forecasts",
+        f"Recommendation: Form strategic partnerships to accelerate market entry - reduces time to market",
+        f"Analysis: Resource requirements and operational costs - detailed breakdown of investments needed",
+        f"Assumption: Limited competitive response in first 12 months - window of opportunity",
+        f"Recommendation: Launch customer acquisition campaign targeting early adopters - phased rollout plan"
     ]
 
 # ========== NEW: Web Research ==========
@@ -585,33 +601,47 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
 
         prompt = f"""You are the {executive} of a company evaluating this {report_type} from {company_name} in the {industry} industry.
 
-Focus on this specific aspect: {selected_topic}
+The presenter has made this specific recommendation or analysis:
+{selected_topic}
 
 Your role focuses on: {focus}{research_context}
 
-Generate ONE challenging, specific question about this aspect. The question should:
-- Be direct and conversational (as if speaking to the presenter)
-- Reference specific details when possible
-- Challenge assumptions or ask for justification
-- Be answerable based on a strategic business plan
-- Be 1-2 sentences max
+Generate ONE tough, probing question that CHALLENGES or CLARIFIES this specific recommendation/analysis. Your question should:
+
+1. DIRECTLY REFERENCE what they proposed or analyzed (use specifics from the topic above)
+2. Challenge one of these aspects:
+   - The underlying assumptions or logic
+   - The feasibility or resource requirements
+   - The competitive response or market dynamics
+   - The financial projections or ROI
+   - Alternative approaches they didn't consider
+   - Risk factors they may have overlooked
+
+3. Be direct and conversational (as if speaking to the presenter face-to-face)
+4. Push them to defend or clarify their thinking
+5. Be 1-2 sentences maximum
 
 IMPORTANT - Strategic Management terminology:
-- Use "strategy" (singular) when referring to the overall business strategy or integrated set of choices
-- Use "strategic initiatives", "actions", or "initiatives" when referring to specific programs or activities
+- Use "strategy" (singular) for overall business strategy or integrated set of choices
+- Use "strategic initiatives", "actions", or "initiatives" for specific programs or activities
 - Avoid using "strategies" (plural) to refer to individual actions or tactics
 - Examples: "What strategic initiatives..." ✓  "What strategies are you implementing..." ✗
 
-Return ONLY the question text, no preamble."""
+Examples of good challenging questions:
+- "You're projecting 40% market share in year two, but what's your plan if competitors drop prices by 30%?"
+- "Your customer acquisition cost analysis assumes organic growth, but how will you actually reach enterprise customers without a sales team?"
+- "You recommend entering the Asian market next year, but what specific capabilities do you currently have for international expansion?"
+
+Return ONLY the question text, no preamble or explanation."""
 
         response = openai_client.chat.completions.create(
             model="gpt-4-turbo-preview",
             messages=[
-                {"role": "system", "content": f"You are the {executive} asking tough business questions. Use precise strategic management terminology: 'strategy' for overall direction, 'strategic initiatives' or 'actions' for specific programs."},
+                {"role": "system", "content": f"You are a tough, experienced {executive} evaluating a business plan. Your job is to identify weak spots, challenge assumptions, and push presenters to think deeper. Reference specific details from their proposal and ask pointed questions that expose gaps in their thinking. Use precise strategic management terminology: 'strategy' for overall direction, 'strategic initiatives' or 'actions' for specific programs."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.8,
-            max_tokens=150
+            temperature=0.9,
+            max_tokens=200
         )
 
         question = response.choices[0].message.content.strip()
