@@ -5,7 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Executive Panel Simulator - McCombs School of Business</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            prefix: 'tw-',
+            corePlugins: {
+                preflight: false,
+            }
+        }
+    </script>
     <style>
         :root {
             --texas-orange: #BF5700;
@@ -203,8 +212,8 @@
         }
         
         .executive-member .avatar {
-            width: 35px;
-            height: 35px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -212,6 +221,14 @@
             color: white;
             font-size: 0.9rem;
             margin-right: 0.75rem;
+            overflow: hidden;
+            border: 3px solid #dee2e6;
+        }
+
+        .executive-member .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         
         .executive-member .info .name {
@@ -340,6 +357,581 @@
         .card-header.bg-info h5 {
             line-height: 38px; /* Match button height */
         }
+
+        /* Version 2: Executive Headshot Styles */
+        .executive-message-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .executive-headshot {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid var(--texas-orange);
+            object-fit: cover;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .executive-message-content {
+            flex: 1;
+        }
+
+        .executive-message {
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .executive-header {
+            margin-bottom: 0.5rem;
+        }
+
+        .executive-question {
+            background-color: #f8f9fa;
+            padding: 0.75rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--texas-orange);
+            margin-bottom: 0.5rem;
+        }
+
+        .message-time {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+
+        .badge.bg-info {
+            font-size: 0.75rem;
+            font-weight: normal;
+        }
+
+        /* Modern Wizard Styles */
+        .wizard-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .wizard-step {
+            display: none;
+        }
+
+        .wizard-step.active {
+            display: block;
+            animation: fadeInUp 0.5s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .progress-steps {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            position: relative;
+        }
+
+        .progress-steps::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #e9ecef;
+            z-index: 0;
+        }
+
+        .progress-line {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            height: 2px;
+            background: var(--texas-orange);
+            transition: width 0.3s ease;
+            z-index: 1;
+        }
+
+        .progress-step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .progress-step-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: white;
+            border: 2px solid #e9ecef;
+            margin: 0 auto 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #6c757d;
+            transition: all 0.3s ease;
+        }
+
+        .progress-step.active .progress-step-circle {
+            border-color: var(--texas-orange);
+            background: var(--texas-orange);
+            color: white;
+            box-shadow: 0 0 0 4px rgba(191, 87, 0, 0.2);
+        }
+
+        .progress-step.completed .progress-step-circle {
+            border-color: var(--texas-orange);
+            background: var(--texas-orange);
+            color: white;
+        }
+
+        .progress-step-label {
+            font-size: 0.875rem;
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        .progress-step.active .progress-step-label {
+            color: var(--texas-orange);
+            font-weight: 600;
+        }
+
+        /* Preset Configuration Cards */
+        .preset-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .preset-card {
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+            position: relative;
+        }
+
+        .preset-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+            border-color: var(--texas-orange);
+        }
+
+        .preset-card.selected {
+            border-color: var(--texas-orange);
+            background: linear-gradient(135deg, rgba(191, 87, 0, 0.05), rgba(232, 106, 0, 0.05));
+        }
+
+        .preset-card.selected::after {
+            content: '\f00c';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            color: var(--texas-orange);
+            font-size: 1.25rem;
+        }
+
+        .preset-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .preset-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--charcoal);
+        }
+
+        .preset-description {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+
+        .preset-specs {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .preset-spec {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+            color: #495057;
+        }
+
+        /* Enhanced Executive Cards */
+        .exec-card-modern {
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 1.25rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+            position: relative;
+        }
+
+        .exec-card-modern:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            border-color: var(--texas-orange);
+        }
+
+        .exec-card-modern.selected {
+            border-color: var(--texas-orange);
+            background: linear-gradient(135deg, var(--texas-orange), var(--texas-orange-light));
+            color: white;
+        }
+
+        .exec-card-modern.selected .exec-specialty,
+        .exec-card-modern.selected .exec-role-title {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .exec-headshot-container {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1rem;
+        }
+
+        .exec-headshot {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .exec-card-modern.selected .exec-headshot {
+            border-color: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .exec-checkmark {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            width: 28px;
+            height: 28px;
+            background: var(--texas-orange);
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.75rem;
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .exec-card-modern.selected .exec-checkmark {
+            display: flex;
+            animation: checkmarkPop 0.3s ease-out;
+        }
+
+        @keyframes checkmarkPop {
+            0% {
+                transform: scale(0);
+            }
+            50% {
+                transform: scale(1.2);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .exec-name {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            text-align: center;
+        }
+
+        .exec-role-title {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .exec-specialty {
+            font-size: 0.75rem;
+            color: #6c757d;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        /* Drag and Drop Upload */
+        .upload-zone {
+            border: 3px dashed #dee2e6;
+            border-radius: 12px;
+            padding: 3rem 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: #f8f9fa;
+        }
+
+        .upload-zone:hover {
+            border-color: var(--texas-orange);
+            background: rgba(191, 87, 0, 0.02);
+        }
+
+        .upload-zone.drag-over {
+            border-color: var(--texas-orange);
+            background: rgba(191, 87, 0, 0.05);
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: var(--texas-orange);
+            margin-bottom: 1rem;
+        }
+
+        .upload-text {
+            font-size: 1.125rem;
+            font-weight: 500;
+            color: var(--charcoal);
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-subtext {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+
+        .file-preview {
+            display: none;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .file-preview.show {
+            display: flex;
+            align-items: center;
+            animation: fadeInUp 0.3s ease-out;
+        }
+
+        .file-icon {
+            font-size: 2rem;
+            color: #dc3545;
+            margin-right: 1rem;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .file-meta {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+
+        .file-remove {
+            background: none;
+            border: none;
+            color: #6c757d;
+            cursor: pointer;
+            font-size: 1.25rem;
+            padding: 0.5rem;
+            transition: color 0.2s;
+        }
+
+        .file-remove:hover {
+            color: #dc3545;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .preset-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .progress-steps {
+                font-size: 0.75rem;
+            }
+
+            .progress-step-circle {
+                width: 32px;
+                height: 32px;
+                font-size: 0.875rem;
+            }
+
+            .progress-step-label {
+                font-size: 0.75rem;
+            }
+
+            .exec-headshot-container {
+                width: 60px;
+                height: 60px;
+            }
+
+            .exec-headshot {
+                width: 60px;
+                height: 60px;
+            }
+        }
+
+        /* Selection Counter Badge */
+        .selection-counter {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+
+        .selection-counter.has-selections {
+            background: rgba(191, 87, 0, 0.1);
+            color: var(--texas-orange);
+            font-weight: 600;
+        }
+
+        /* Modern Executive Panel Styles */
+        .executive-member {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            background: #f8f9fa;
+        }
+
+        .executive-member.active {
+            background: linear-gradient(135deg, rgba(191, 87, 0, 0.1), rgba(232, 106, 0, 0.05));
+            border-color: var(--texas-orange);
+            box-shadow: 0 4px 12px rgba(191, 87, 0, 0.15);
+            transform: translateX(4px);
+        }
+
+        .executive-member.active::before {
+            content: '▶';
+            position: absolute;
+            left: 0.5rem;
+            color: var(--texas-orange);
+            font-size: 0.875rem;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .executive-member .avatar {
+            position: relative;
+        }
+
+        .executive-member.active .avatar {
+            box-shadow: 0 0 0 3px var(--texas-orange);
+        }
+
+        /* Modern Conversation Area */
+        .conversation-container {
+            max-height: 500px;
+            overflow-y: auto;
+            padding: 1.5rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .message {
+            margin-bottom: 1.5rem;
+            animation: fadeInUp 0.4s ease-out;
+        }
+
+        .message.executive {
+            background: white;
+            padding: 1.25rem;
+            border-radius: 12px;
+            border-left: 4px solid var(--texas-orange);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .message.student {
+            background: rgba(191, 87, 0, 0.05);
+            padding: 1.25rem;
+            border-radius: 12px;
+            border-left: 4px solid #6c757d;
+        }
+
+        /* Modern Summary Cards */
+        .summary-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e9ecef;
+        }
+
+        .summary-card h5 {
+            color: var(--texas-orange);
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .summary-stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .summary-stat:last-child {
+            border-bottom: none;
+        }
+
+        .summary-stat-label {
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .summary-stat-value {
+            font-weight: 600;
+            color: var(--charcoal);
+        }
     </style>
 </head>
 <body>
@@ -356,58 +948,151 @@
         </div>
     </div>
 
-    <div class="container">
-        <!-- Setup Phase -->
+        <!-- Setup Phase - Modernized with Wizard -->
         <div id="setup-phase" class="phase active">
-            <div class="row">
-                <div class="col-md-8 mx-auto">
-                    <div class="card shadow">
-                        <div class="card-header bg-primary text-white">
-                            <h3 class="mb-0">
-                                <i class="fas fa-upload"></i>
-                                Presentation Setup
-                            </h3>
+            <div class="wizard-container">
+                <!-- Hero Section -->
+                <div class="tw-text-center tw-mb-8">
+                    <h1 class="tw-text-3xl md:tw-text-4xl tw-font-bold tw-mb-3" style="color: var(--charcoal);">
+                        <i class="fas fa-users tw-mr-2" style="color: var(--texas-orange);"></i>
+                        Configure Your Executive Panel Session
+                    </h1>
+                    <p class="tw-text-gray-600 tw-text-lg">
+                        Practice your pitch and face the C-Suite in a realistic simulation
+                    </p>
+                </div>
+
+                <!-- Progress Steps -->
+                <div class="progress-steps" id="progress-steps">
+                    <div class="progress-line" id="progress-line" style="width: 0%"></div>
+                    <div class="progress-step active" data-step="1">
+                        <div class="progress-step-circle">1</div>
+                        <div class="progress-step-label">Upload Your Report</div>
+                    </div>
+                    <div class="progress-step" data-step="2">
+                        <div class="progress-step-circle">2</div>
+                        <div class="progress-step-label">Enter Company Details</div>
+                    </div>
+                    <div class="progress-step" data-step="3">
+                        <div class="progress-step-circle">3</div>
+                        <div class="progress-step-label">Configure Executive Panel</div>
+                    </div>
+                    <div class="progress-step" data-step="4">
+                        <div class="progress-step-circle">4</div>
+                        <div class="progress-step-label">Launch Session</div>
+                    </div>
+                </div>
+
+                <form id="setup-form" enctype="multipart/form-data">
+                    <!-- Step 1: Preset Selection + Upload -->
+                    <div class="wizard-step active" data-step="1">
+                        <div class="card shadow-sm">
+                            <div class="card-body" style="padding: 2rem;">
+                                <h3 class="tw-text-2xl tw-font-semibold tw-mb-6" style="color: var(--charcoal);">
+                                    Choose Your Session Type
+                                </h3>
+
+                                <!-- Preset Configurations -->
+                                <div class="preset-grid">
+                                    <div class="preset-card" data-preset="startup">
+                                        <span class="preset-icon">🚀</span>
+                                        <div class="preset-title">Startup Pitch</div>
+                                        <div class="preset-description">Perfect for investment pitches and Series A presentations</div>
+                                        <div class="preset-specs">
+                                            <span class="preset-spec"><i class="fas fa-users"></i> CEO + CFO</span>
+                                            <span class="preset-spec"><i class="fas fa-clock"></i> 10 min</span>
+                                            <span class="preset-spec"><i class="fas fa-question-circle"></i> 10 questions</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="preset-card" data-preset="mba">
+                                        <span class="preset-icon">💼</span>
+                                        <div class="preset-title">MBA Case Study</div>
+                                        <div class="preset-description">Comprehensive analysis with full executive panel</div>
+                                        <div class="preset-specs">
+                                            <span class="preset-spec"><i class="fas fa-users"></i> Full Panel</span>
+                                            <span class="preset-spec"><i class="fas fa-clock"></i> 15 min</span>
+                                            <span class="preset-spec"><i class="fas fa-question-circle"></i> 15 questions</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="preset-card selected" data-preset="custom">
+                                        <span class="preset-icon">🎓</span>
+                                        <div class="preset-title">Custom Setup</div>
+                                        <div class="preset-description">Choose your own executives and configuration</div>
+                                        <div class="preset-specs">
+                                            <span class="preset-spec"><i class="fas fa-sliders-h"></i> Customizable</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <hr class="tw-my-6">
+
+                                <h4 class="tw-text-xl tw-font-semibold tw-mb-4" style="color: var(--charcoal);">
+                                    <i class="fas fa-file-pdf text-danger tw-mr-2"></i>
+                                    Upload Your Report
+                                </h4>
+
+                                <!-- Drag and Drop Upload Zone -->
+                                <div class="upload-zone" id="upload-zone">
+                                    <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                                    <div class="upload-text">Drag & drop your PDF here</div>
+                                    <div class="upload-subtext">or click to browse</div>
+                                    <div class="tw-mt-3">
+                                        <small class="text-muted">Supports: Business Plans, Pitch Decks, Case Analyses (up to 50MB)</small>
+                                    </div>
+                                    <input type="file" id="report-pdf" name="report-pdf" accept=".pdf" required style="display: none;">
+                                </div>
+
+                                <!-- File Preview -->
+                                <div class="file-preview" id="file-preview">
+                                    <i class="fas fa-file-pdf file-icon"></i>
+                                    <div class="file-info">
+                                        <div class="file-name" id="file-name"></div>
+                                        <div class="file-meta" id="file-meta"></div>
+                                    </div>
+                                    <button type="button" class="file-remove" id="file-remove">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+
+                                <div class="tw-flex tw-justify-end tw-mt-6">
+                                    <button type="button" class="btn btn-primary btn-lg" id="next-step-1" disabled>
+                                        Next: Company Details
+                                        <i class="fas fa-arrow-right tw-ml-2"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="card-body">
-                            <form id="setup-form" enctype="multipart/form-data">
-                                <!-- PDF Upload Section -->
-                                <div class="mb-4">
-                                    <label for="report-pdf" class="form-label">
-                                        <i class="fas fa-file-pdf text-danger"></i>
-                                        Upload Your Report (PDF)
-                                    </label>
-                                    <input type="file" class="form-control" id="report-pdf" 
-                                           name="report-pdf" accept=".pdf" required>
-                                    <small class="text-muted">
-                                        Upload your business plan, case analysis, or presentation slides as PDF
-                                    </small>
-                                </div>
+                    </div>
 
-                                <!-- Company & Industry Info -->
-                                <div class="row">
+                    <!-- Step 2: Company Details -->
+                    <div class="wizard-step" data-step="2">
+                        <div class="card shadow-sm">
+                            <div class="card-body" style="padding: 2rem;">
+                                <h3 class="tw-text-2xl tw-font-semibold tw-mb-6" style="color: var(--charcoal);">
+                                    Tell Us About Your Company
+                                </h3>
+
+                                <div class="row tw-mb-4">
                                     <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label for="company-name" class="form-label">Company Name</label>
-                                            <input type="text" class="form-control" id="company-name" 
-                                                   name="company-name" placeholder="e.g., Tesla, Amazon, Your Startup" required>
-                                        </div>
+                                        <label for="company-name" class="form-label tw-font-semibold">Company Name</label>
+                                        <input type="text" class="form-control form-control-lg" id="company-name"
+                                               name="company-name" placeholder="e.g., Tesla, Amazon, Your Startup" required>
                                     </div>
                                     <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label for="industry" class="form-label">Industry</label>
-                                            <input type="text" class="form-control" id="industry" 
-                                                   name="industry" placeholder="e.g., Technology, Healthcare, Finance" required>
-                                            <small class="text-muted">
-                                                Enter the specific industry for your company (will be used to tailor executive questions)
-                                            </small>
-                                        </div>
+                                        <label for="industry" class="form-label tw-font-semibold">Industry</label>
+                                        <input type="text" class="form-control form-control-lg" id="industry"
+                                               name="industry" placeholder="e.g., Technology, Healthcare, Finance" required>
+                                        <small class="text-muted">
+                                            <i class="fas fa-info-circle"></i> Used to tailor executive questions
+                                        </small>
                                     </div>
                                 </div>
 
-                                <!-- Report Type -->
-                                <div class="mb-3">
-                                    <label for="report-type" class="form-label">Type of Report/Presentation</label>
-                                    <select class="form-select" id="report-type" name="report-type" required>
+                                <div class="tw-mb-4">
+                                    <label for="report-type" class="form-label tw-font-semibold">Type of Report/Presentation</label>
+                                    <select class="form-select form-select-lg" id="report-type" name="report-type" required>
                                         <option value="">Select Report Type</option>
                                         <option value="Business Plan">Business Plan</option>
                                         <option value="Case Analysis">Case Study Analysis</option>
@@ -421,125 +1106,340 @@
                                     </select>
                                 </div>
 
-                                <!-- Session Configuration -->
-                                <div class="mb-4">
-                                    <label class="form-label">Session Configuration</label>
-                                    <small class="text-muted d-block mb-3">
-                                        Configure how long the executive panel session should run
-                                    </small>
-                                    
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="mb-3">
-                                                <label for="session-type" class="form-label">Session Limit Type</label>
-                                                <select class="form-select" id="session-type" name="session-type" required>
-                                                    <option value="questions">Number of Questions</option>
-                                                    <option value="time">Time Limit</option>
-                                                </select>
-                                            </div>
+                                <div class="row tw-mb-4">
+                                    <div class="col-md-6">
+                                        <label for="session-type" class="form-label tw-font-semibold">Session Limit Type</label>
+                                        <select class="form-select form-select-lg" id="session-type" name="session-type" required>
+                                            <option value="questions">Number of Questions</option>
+                                            <option value="time">Time Limit</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div id="question-limit-section">
+                                            <label for="question-limit" class="form-label tw-font-semibold">Total Questions</label>
+                                            <select class="form-select form-select-lg" id="question-limit" name="question-limit">
+                                                <option value="6">🏃 6 Questions (Quick ~ 5-7 min)</option>
+                                                <option value="10" selected>📊 10 Questions (Standard ~ 10-12 min)</option>
+                                                <option value="15">🎯 15 Questions (Deep Dive ~ 15-18 min)</option>
+                                                <option value="20">🔥 20 Questions (Full Board ~ 20-25 min)</option>
+                                            </select>
                                         </div>
-                                        <div class="col-md-6">
-                                            <div class="mb-3" id="question-limit-section">
-                                                <label for="question-limit" class="form-label">Total Questions</label>
-                                                <select class="form-select" id="question-limit" name="question-limit">
-                                                    <option value="6">6 Questions (Short - 5 min)</option>
-                                                    <option value="10" selected>10 Questions (Medium - 10 min)</option>
-                                                    <option value="15">15 Questions (Long - 15 min)</option>
-                                                    <option value="20">20 Questions (Extended - 20 min)</option>
-                                                </select>
-                                            </div>
-                                            <div class="mb-3" id="time-limit-section" style="display: none;">
-                                                <label for="time-limit" class="form-label">Time Limit (minutes)</label>
-                                                <select class="form-select" id="time-limit" name="time-limit">
-                                                    <option value="5">5 Minutes</option>
-                                                    <option value="10" selected>10 Minutes</option>
-                                                    <option value="15">15 Minutes</option>
-                                                    <option value="20">20 Minutes</option>
-                                                </select>
-                                            </div>
+                                        <div id="time-limit-section" style="display: none;">
+                                            <label for="time-limit" class="form-label tw-font-semibold">Time Limit</label>
+                                            <select class="form-select form-select-lg" id="time-limit" name="time-limit">
+                                                <option value="5">5 Minutes</option>
+                                                <option value="10" selected>10 Minutes</option>
+                                                <option value="15">15 Minutes</option>
+                                                <option value="20">20 Minutes</option>
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Executive Panel Selection -->
-                                <div class="mb-4">
-                                    <label class="form-label">Select Executive Panel Members</label>
-                                    <small class="text-muted d-block mb-2">
-                                        Choose executives who will ask questions based on your report content
-                                    </small>
-                                    <div class="executive-grid">
-                                        <div class="executive-card" data-role="CEO">
-                                            <input type="checkbox" id="exec-ceo" name="executives" value="CEO">
-                                            <label for="exec-ceo">
-                                                <div class="exec-icon"><i class="fas fa-crown"></i></div>
-                                                <div class="exec-info">
-                                                    <strong>CEO</strong>
-                                                    <small>Strategy & Vision Questions</small>
-                                                </div>
-                                            </label>
-                                        </div>
-                                        
-                                        <div class="executive-card" data-role="CFO">
-                                            <input type="checkbox" id="exec-cfo" name="executives" value="CFO">
-                                            <label for="exec-cfo">
-                                                <div class="exec-icon"><i class="fas fa-chart-line"></i></div>
-                                                <div class="exec-info">
-                                                    <strong>CFO</strong>
-                                                    <small>Financial Analysis Questions</small>
-                                                </div>
-                                            </label>
-                                        </div>
-                                        
-                                        <div class="executive-card" data-role="CTO">
-                                            <input type="checkbox" id="exec-cto" name="executives" value="CTO">
-                                            <label for="exec-cto">
-                                                <div class="exec-icon"><i class="fas fa-microchip"></i></div>
-                                                <div class="exec-info">
-                                                    <strong>CTO</strong>
-                                                    <small>Technology & Implementation</small>
-                                                </div>
-                                            </label>
-                                        </div>
-                                        
-                                        <div class="executive-card" data-role="CMO">
-                                            <input type="checkbox" id="exec-cmo" name="executives" value="CMO">
-                                            <label for="exec-cmo">
-                                                <div class="exec-icon"><i class="fas fa-bullhorn"></i></div>
-                                                <div class="exec-info">
-                                                    <strong>CMO</strong>
-                                                    <small>Marketing & Customer Questions</small>
-                                                </div>
-                                            </label>
-                                        </div>
-                                        
-                                        <div class="executive-card" data-role="COO">
-                                            <input type="checkbox" id="exec-coo" name="executives" value="COO">
-                                            <label for="exec-coo">
-                                                <div class="exec-icon"><i class="fas fa-cogs"></i></div>
-                                                <div class="exec-info">
-                                                    <strong>COO</strong>
-                                                    <small>Operations & Execution</small>
-                                                </div>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="d-grid">
-                                    <button type="submit" class="btn btn-primary btn-lg">
-                                        <i class="fas fa-brain"></i>
-                                        Analyze Report & Start Presentation
+                                <div class="tw-flex tw-justify-between tw-mt-6">
+                                    <button type="button" class="btn btn-outline-secondary btn-lg" id="prev-step-2">
+                                        <i class="fas fa-arrow-left tw-mr-2"></i>
+                                        Back
+                                    </button>
+                                    <button type="button" class="btn btn-primary btn-lg" id="next-step-2">
+                                        Next: Select Executives
+                                        <i class="fas fa-arrow-right tw-ml-2"></i>
                                     </button>
                                 </div>
-                                
-                                <div id="upload-status" class="mt-3" style="display: none;">
-                                    <div class="progress">
-                                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                                             role="progressbar" style="width: 0%"></div>
-                                    </div>
-                                    <small class="text-muted">Uploading and analyzing your report...</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Executive Selection -->
+                    <div class="wizard-step" data-step="3">
+                        <div class="card shadow-sm">
+                            <div class="card-body" style="padding: 2rem;">
+                                <h3 class="tw-text-2xl tw-font-semibold tw-mb-3" style="color: var(--charcoal);">
+                                    Select Your Executive Panel
+                                </h3>
+                                <p class="text-muted tw-mb-4">
+                                    Choose the executives who will evaluate your presentation and ask questions based on your report content
+                                </p>
+
+                                <!-- Selection Counter -->
+                                <div class="selection-counter" id="selection-counter">
+                                    <i class="fas fa-check-circle"></i>
+                                    <span id="selection-count">No executives selected</span>
                                 </div>
-                            </form>
+
+                                <!-- Executive Cards Grid -->
+                                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 tw-mb-4">
+                                    <!-- CEO -->
+                                    <div class="col">
+                                        <div class="exec-card-modern" data-role="CEO" data-exec-name="Sarah Chen">
+                                            <input type="checkbox" id="exec-ceo" name="executives" value="CEO" style="display: none;">
+                                            <div class="exec-headshot-container">
+                                                <img src="{{ url_for('static', filename='images/executives/sarah_chen.png') }}"
+                                                     alt="Sarah Chen" class="exec-headshot">
+                                                <div class="exec-checkmark">
+                                                    <i class="fas fa-check"></i>
+                                                </div>
+                                            </div>
+                                            <div class="exec-name">Sarah Chen</div>
+                                            <div class="exec-role-title">Chief Executive Officer</div>
+                                            <div class="exec-specialty">Strategy & Vision Questions</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- CFO -->
+                                    <div class="col">
+                                        <div class="exec-card-modern" data-role="CFO" data-exec-name="Michael Rodriguez">
+                                            <input type="checkbox" id="exec-cfo" name="executives" value="CFO" style="display: none;">
+                                            <div class="exec-headshot-container">
+                                                <img src="{{ url_for('static', filename='images/executives/michael_rodriguez.png') }}"
+                                                     alt="Michael Rodriguez" class="exec-headshot">
+                                                <div class="exec-checkmark">
+                                                    <i class="fas fa-check"></i>
+                                                </div>
+                                            </div>
+                                            <div class="exec-name">Michael Rodriguez</div>
+                                            <div class="exec-role-title">Chief Financial Officer</div>
+                                            <div class="exec-specialty">Financial Analysis Questions</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- CTO -->
+                                    <div class="col">
+                                        <div class="exec-card-modern" data-role="CTO" data-exec-name="Dr. Lisa Kincaid">
+                                            <input type="checkbox" id="exec-cto" name="executives" value="CTO" style="display: none;">
+                                            <div class="exec-headshot-container">
+                                                <img src="{{ url_for('static', filename='images/executives/lisa_kincaid.png') }}"
+                                                     alt="Dr. Lisa Kincaid" class="exec-headshot">
+                                                <div class="exec-checkmark">
+                                                    <i class="fas fa-check"></i>
+                                                </div>
+                                            </div>
+                                            <div class="exec-name">Dr. Lisa Kincaid</div>
+                                            <div class="exec-role-title">Chief Technology Officer</div>
+                                            <div class="exec-specialty">Technology & Implementation</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- CMO -->
+                                    <div class="col">
+                                        <div class="exec-card-modern" data-role="CMO" data-exec-name="James Thompson">
+                                            <input type="checkbox" id="exec-cmo" name="executives" value="CMO" style="display: none;">
+                                            <div class="exec-headshot-container">
+                                                <img src="{{ url_for('static', filename='images/executives/james_thompson.png') }}"
+                                                     alt="James Thompson" class="exec-headshot">
+                                                <div class="exec-checkmark">
+                                                    <i class="fas fa-check"></i>
+                                                </div>
+                                            </div>
+                                            <div class="exec-name">James Thompson</div>
+                                            <div class="exec-role-title">Chief Marketing Officer</div>
+                                            <div class="exec-specialty">Marketing & Customer Questions</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- COO -->
+                                    <div class="col">
+                                        <div class="exec-card-modern" data-role="COO" data-exec-name="Rebecca Johnson">
+                                            <input type="checkbox" id="exec-coo" name="executives" value="COO" style="display: none;">
+                                            <div class="exec-headshot-container">
+                                                <img src="{{ url_for('static', filename='images/executives/rebecca_johnson.png') }}"
+                                                     alt="Rebecca Johnson" class="exec-headshot">
+                                                <div class="exec-checkmark">
+                                                    <i class="fas fa-check"></i>
+                                                </div>
+                                            </div>
+                                            <div class="exec-name">Rebecca Johnson</div>
+                                            <div class="exec-role-title">Chief Operating Officer</div>
+                                            <div class="exec-specialty">Operations & Execution</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Advanced Options -->
+                                <div class="tw-mt-6 tw-p-4 tw-bg-gray-50 tw-rounded-lg">
+                                    <h5 class="tw-font-semibold tw-mb-3">
+                                        <i class="fas fa-sliders-h tw-mr-2"></i>
+                                        Advanced Options
+                                    </h5>
+                                    <div class="form-check form-switch tw-mb-3">
+                                        <input class="form-check-input" type="checkbox" id="allow-followups" name="allow-followups" value="true">
+                                        <label class="form-check-label" for="allow-followups">
+                                            <strong>Allow Follow-up Questions</strong>
+                                            <small class="tw-block text-muted">Executives may ask clarifying questions if needed (max 1 per question)</small>
+                                        </label>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="enable-research" name="enable-research" value="true">
+                                        <label class="form-check-label" for="enable-research">
+                                            <strong>Enable Web Research</strong>
+                                            <small class="tw-block text-muted">AI will research your company online for more informed questions (best for real companies)</small>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="tw-flex tw-justify-between tw-mt-6">
+                                    <button type="button" class="btn btn-outline-secondary btn-lg" id="prev-step-3">
+                                        <i class="fas fa-arrow-left tw-mr-2"></i>
+                                        Back
+                                    </button>
+                                    <button type="button" class="btn btn-primary btn-lg" id="next-step-3" disabled>
+                                        Review & Launch
+                                        <i class="fas fa-arrow-right tw-ml-2"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Review & Launch -->
+                    <div class="wizard-step" data-step="4">
+                        <div class="card shadow-sm">
+                            <div class="card-body" style="padding: 2rem;">
+                                <h3 class="tw-text-2xl tw-font-semibold tw-mb-3" style="color: var(--charcoal);">
+                                    <i class="fas fa-clipboard-check tw-mr-2" style="color: var(--texas-orange);"></i>
+                                    Review Your Configuration
+                                </h3>
+                                <p class="text-muted tw-mb-6">
+                                    Please review your session setup before launching
+                                </p>
+
+                                <!-- Review Summary -->
+                                <div class="row">
+                                    <div class="col-md-6 tw-mb-4">
+                                        <div class="tw-p-4 tw-bg-gray-50 tw-rounded-lg">
+                                            <h5 class="tw-font-semibold tw-mb-3">
+                                                <i class="fas fa-building tw-mr-2"></i>
+                                                Company Details
+                                            </h5>
+                                            <dl class="row tw-mb-0">
+                                                <dt class="col-sm-5 tw-text-sm">Company:</dt>
+                                                <dd class="col-sm-7 tw-text-sm" id="review-company">-</dd>
+                                                <dt class="col-sm-5 tw-text-sm">Industry:</dt>
+                                                <dd class="col-sm-7 tw-text-sm" id="review-industry">-</dd>
+                                                <dt class="col-sm-5 tw-text-sm">Report Type:</dt>
+                                                <dd class="col-sm-7 tw-text-sm" id="review-report-type">-</dd>
+                                            </dl>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 tw-mb-4">
+                                        <div class="tw-p-4 tw-bg-gray-50 tw-rounded-lg">
+                                            <h5 class="tw-font-semibold tw-mb-3">
+                                                <i class="fas fa-cog tw-mr-2"></i>
+                                                Session Configuration
+                                            </h5>
+                                            <dl class="row tw-mb-0">
+                                                <dt class="col-sm-5 tw-text-sm">Questions:</dt>
+                                                <dd class="col-sm-7 tw-text-sm" id="review-questions">-</dd>
+                                                <dt class="col-sm-5 tw-text-sm">Est. Duration:</dt>
+                                                <dd class="col-sm-7 tw-text-sm" id="review-duration">-</dd>
+                                                <dt class="col-sm-5 tw-text-sm">Follow-ups:</dt>
+                                                <dd class="col-sm-7 tw-text-sm" id="review-followups">-</dd>
+                                                <dt class="col-sm-5 tw-text-sm">Web Research:</dt>
+                                                <dd class="col-sm-7 tw-text-sm" id="review-research">-</dd>
+                                            </dl>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12 tw-mb-4">
+                                        <div class="tw-p-4 tw-bg-gray-50 tw-rounded-lg">
+                                            <h5 class="tw-font-semibold tw-mb-3">
+                                                <i class="fas fa-users tw-mr-2"></i>
+                                                Executive Panel
+                                            </h5>
+                                            <div id="review-executives" class="tw-flex tw-flex-wrap tw-gap-2">
+                                                <!-- Executive badges will be inserted here -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="tw-flex tw-justify-between tw-mt-6">
+                                    <button type="button" class="btn btn-outline-secondary btn-lg" id="prev-step-4">
+                                        <i class="fas fa-arrow-left tw-mr-2"></i>
+                                        Back
+                                    </button>
+                                    <button type="submit" class="btn btn-primary btn-lg" style="padding: 0.75rem 2rem; font-size: 1.125rem;">
+                                        <i class="fas fa-rocket tw-mr-2"></i>
+                                        Analyze Report & Launch Panel
+                                    </button>
+                                </div>
+
+                                <div id="upload-status" class="tw-mt-4" style="display: none;">
+                                    <div class="progress" style="height: 24px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                             role="progressbar" style="width: 0%; font-size: 0.875rem;"></div>
+                                    </div>
+                                    <small class="text-muted tw-mt-2 tw-block">
+                                        <i class="fas fa-spinner fa-spin tw-mr-2"></i>
+                                        Analyzing your report with AI... This may take 1-3 minutes for comprehensive PDF analysis (text, tables, images, and optional web research).
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Ready to Launch Phase -->
+        <div id="ready-phase" class="phase">
+            <div class="wizard-container">
+                <div class="card shadow-sm">
+                    <div class="card-body text-center" style="padding: 3rem 2rem;">
+                        <div class="tw-mb-6">
+                            <i class="fas fa-check-circle" style="font-size: 5rem; color: #28a745;"></i>
+                        </div>
+                        <h2 class="tw-text-3xl tw-font-bold tw-mb-4" style="color: var(--charcoal);">
+                            Your Panel is Ready!
+                        </h2>
+                        <p class="tw-text-lg tw-mb-4" style="color: #6c757d;">
+                            We've analyzed your report and prepared the executive panel for your presentation.
+                        </p>
+
+                        <div class="row justify-content-center tw-mb-6">
+                            <div class="col-md-8">
+                                <div class="tw-p-4 tw-bg-gray-50 tw-rounded-lg tw-mb-4">
+                                    <h5 class="tw-font-semibold tw-mb-3">
+                                        <i class="fas fa-info-circle tw-mr-2"></i>
+                                        What to Expect
+                                    </h5>
+                                    <ul class="list-unstyled tw-text-left" style="color: #495057;">
+                                        <li class="tw-mb-2">
+                                            <i class="fas fa-check tw-mr-2" style="color: var(--texas-orange);"></i>
+                                            Executives will ask questions based on your report content
+                                        </li>
+                                        <li class="tw-mb-2">
+                                            <i class="fas fa-check tw-mr-2" style="color: var(--texas-orange);"></i>
+                                            You can respond via text or voice
+                                        </li>
+                                        <li class="tw-mb-2">
+                                            <i class="fas fa-check tw-mr-2" style="color: var(--texas-orange);"></i>
+                                            Questions will be read aloud by AI voice
+                                        </li>
+                                        <li class="tw-mb-2">
+                                            <i class="fas fa-check tw-mr-2" style="color: var(--texas-orange);"></i>
+                                            Session will end after <span id="ready-question-count">10</span> questions
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="tw-p-4 tw-bg-blue-50 tw-rounded-lg tw-mb-4">
+                                    <p class="tw-mb-0" style="color: #0c5460;">
+                                        <i class="fas fa-lightbulb tw-mr-2"></i>
+                                        <strong>Tip:</strong> Take a moment to review your notes and prepare yourself before starting.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <button id="launch-panel-btn" class="btn btn-primary btn-lg" style="padding: 1rem 3rem; font-size: 1.25rem;">
+                                <i class="fas fa-rocket tw-mr-2"></i>
+                                Launch Executive Panel
+                            </button>
+                            <br>
+                            <small class="text-muted tw-mt-2 tw-block">Click when you're ready to begin</small>
                         </div>
                     </div>
                 </div>
@@ -551,14 +1451,15 @@
             <div class="row">
                 <!-- Executive Panel -->
                 <div class="col-md-4">
-                    <div class="card shadow sticky-top">
-                        <div class="card-header bg-info text-white">
-                            <h5 class="mb-0">
-                                <i class="fas fa-users"></i>
+                    <div class="card shadow-sm sticky-top" style="top: 20px;">
+                        <div class="card-header" style="background: linear-gradient(135deg, var(--texas-orange), var(--texas-orange-light)); color: white;">
+                            <h5 class="mb-0 tw-font-semibold">
+                                <i class="fas fa-users tw-mr-2"></i>
                                 Executive Panel
                             </h5>
+                            <small class="tw-opacity-90">Who's asking questions</small>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body" style="padding: 1rem;">
                             <div id="executive-list">
                                 <!-- Populated dynamically -->
                             </div>
@@ -568,16 +1469,21 @@
 
                 <!-- Conversation Area -->
                 <div class="col-md-8">
-                    <div class="card shadow">
-                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
-                                <i class="fas fa-comments"></i>
-                                Presentation Simulation
-                            </h5>
-                            <button id="end-session-btn" class="btn btn-outline-light btn-sm">
-                                <i class="fas fa-stop"></i>
-                                End Session
-                            </button>
+                    <div class="card shadow-sm">
+                        <div class="card-header" style="background: linear-gradient(135deg, #28a745, #20c997); color: white;">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-0 tw-font-semibold">
+                                        <i class="fas fa-comments tw-mr-2"></i>
+                                        Presentation Simulation
+                                    </h5>
+                                    <small class="tw-opacity-90">Respond to executive questions</small>
+                                </div>
+                                <button id="end-session-btn" class="btn btn-outline-light btn-sm">
+                                    <i class="fas fa-stop tw-mr-1"></i>
+                                    End Session
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body">
                             <div id="conversation-area" class="conversation-container">
@@ -633,56 +1539,75 @@
 
         <!-- Summary Phase -->
         <div id="summary-phase" class="phase">
-            <div class="row">
-                <div class="col-md-10 mx-auto">
-                    <div class="card shadow">
-                        <div class="card-header bg-warning text-dark">
-                            <h3 class="mb-0">
-                                <i class="fas fa-chart-bar"></i>
-                                Session Summary
-                            </h3>
-                        </div>
-                        <div class="card-body">
-                            <div id="session-summary">
-                                <!-- Summary content populated dynamically -->
-                            </div>
-                            
-                            <div class="mt-4">
-                                <div class="alert alert-success">
-                                    <h5>Excellent Work!</h5>
-                                    <p>You successfully presented to the executive panel and responded to their strategic questions. This type of practice will help you prepare for real-world executive presentations and strategic discussions.</p>
-                                </div>
+            <div class="wizard-container">
+                <div class="tw-text-center tw-mb-6">
+                    <div class="tw-mb-4">
+                        <i class="fas fa-check-circle" style="font-size: 4rem; color: #28a745;"></i>
+                    </div>
+                    <h2 class="tw-text-3xl tw-font-bold tw-mb-2" style="color: var(--charcoal);">
+                        Presentation Session Complete!
+                    </h2>
+                    <p class="tw-text-lg" style="color: #6c757d;">
+                        Great job presenting to the executive panel
+                    </p>
+                </div>
 
-                                <div class="card">
-                                    <div class="card-header bg-info text-white">
-                                        <h5 class="mb-0">
-                                            <i class="fas fa-download"></i>
-                                            Session Transcript
-                                        </h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <p>Download a complete transcript of your executive panel session including all questions and your responses. This can be useful for:</p>
-                                        <ul>
-                                            <li>Reviewing your performance and responses</li>
-                                            <li>Identifying areas for improvement</li>
-                                            <li>Using as reference for future presentations</li>
-                                            <li>Submitting as part of course assignments</li>
-                                        </ul>
-                                        <div class="text-center">
-                                            <a href="/download_transcript" class="btn btn-info btn-lg" id="download-transcript-btn">
-                                                <i class="fas fa-file-download"></i>
-                                                Download Session Transcript
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                <div id="session-summary">
+                    <!-- Summary content populated dynamically -->
+                </div>
+
+                <div class="tw-mt-6">
+                    <div class="summary-card" style="border-left: 4px solid #28a745;">
+                        <h5>
+                            <i class="fas fa-trophy"></i>
+                            Excellent Work!
+                        </h5>
+                        <p class="tw-mb-0" style="color: #495057; line-height: 1.6;">
+                            You successfully presented to the executive panel and responded to their strategic questions. This type of practice will help you prepare for real-world executive presentations and strategic discussions.
+                        </p>
+                    </div>
+
+                    <div class="summary-card" style="border-left: 4px solid var(--texas-orange);">
+                        <h5>
+                            <i class="fas fa-download"></i>
+                            Session Transcript
+                        </h5>
+                        <p style="color: #495057; margin-bottom: 1rem;">
+                            Download a complete transcript of your executive panel session including all questions and your responses. This can be useful for:
+                        </p>
+                        <ul style="color: #495057; margin-bottom: 1.5rem; padding-left: 1.5rem;">
+                            <li style="margin-bottom: 0.5rem;">Reviewing your performance and responses</li>
+                            <li style="margin-bottom: 0.5rem;">Identifying areas for improvement</li>
+                            <li style="margin-bottom: 0.5rem;">Using as reference for future presentations</li>
+                            <li>Submitting as part of course assignments</li>
+                        </ul>
+                        <div class="text-center">
+                            <a href="/download_transcript" class="btn btn-lg" id="download-transcript-btn"
+                               style="background: var(--texas-orange); color: white; padding: 0.75rem 2rem;">
+                                <i class="fas fa-file-download tw-mr-2"></i>
+                                Download Session Transcript
+                            </a>
+                        </div>
+                    </div>
+                </div>
                             
                             <div class="mt-4 text-center">
-                                <button id="new-session-btn" class="btn btn-primary btn-lg">
-                                    <i class="fas fa-redo"></i>
-                                    Start New Session
-                                </button>
+                                <div class="row justify-content-center">
+                                    <div class="col-md-6 mb-3">
+                                        <button id="same-company-session-btn" class="btn btn-outline-primary btn-lg w-100">
+                                            <i class="fas fa-redo"></i>
+                                            Same Company, New Panel
+                                        </button>
+                                        <small class="text-muted d-block mt-2">Keep same report, select different executives</small>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <button id="new-session-btn" class="btn btn-primary btn-lg w-100">
+                                            <i class="fas fa-plus-circle"></i>
+                                            Start Completely Over
+                                        </button>
+                                        <small class="text-muted d-block mt-2">Upload new report and start fresh</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -701,6 +1626,354 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Wizard Navigation and Modern UI JavaScript
+        let currentStep = 1;
+        let uploadedFile = null;
+        const totalSteps = 4;
+
+        // Initialize wizard on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeWizard();
+            initializeFileUpload();
+            initializePresets();
+            initializeExecutiveCards();
+            initializeReview();
+        });
+
+        // Wizard Navigation
+        function initializeWizard() {
+            // Next buttons
+            document.getElementById('next-step-1')?.addEventListener('click', () => goToStep(2));
+            document.getElementById('next-step-2')?.addEventListener('click', () => goToStep(3));
+            document.getElementById('next-step-3')?.addEventListener('click', () => goToStep(4));
+
+            // Previous buttons
+            document.getElementById('prev-step-2')?.addEventListener('click', () => goToStep(1));
+            document.getElementById('prev-step-3')?.addEventListener('click', () => goToStep(2));
+            document.getElementById('prev-step-4')?.addEventListener('click', () => goToStep(3));
+
+            // Session type toggle
+            document.getElementById('session-type')?.addEventListener('change', function() {
+                if (this.value === 'time') {
+                    document.getElementById('question-limit-section').style.display = 'none';
+                    document.getElementById('time-limit-section').style.display = 'block';
+                } else {
+                    document.getElementById('question-limit-section').style.display = 'block';
+                    document.getElementById('time-limit-section').style.display = 'none';
+                }
+            });
+        }
+
+        function goToStep(step) {
+            // Validate current step before proceeding
+            if (step > currentStep && !validateStep(currentStep)) {
+                return;
+            }
+
+            // Hide current step
+            document.querySelectorAll('.wizard-step').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.progress-step').forEach(s => s.classList.remove('active', 'completed'));
+
+            // Show new step
+            const newStep = document.querySelector(`.wizard-step[data-step="${step}"]`);
+            if (newStep) {
+                newStep.classList.add('active');
+                currentStep = step;
+
+                // Update progress
+                updateProgress(step);
+
+                // If going to step 4 (review), populate review section
+                if (step === 4) {
+                    populateReview();
+                }
+
+                // Scroll to top
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        function updateProgress(step) {
+            // Update progress steps
+            for (let i = 1; i <= totalSteps; i++) {
+                const progressStep = document.querySelector(`.progress-step[data-step="${i}"]`);
+                if (i < step) {
+                    progressStep.classList.add('completed');
+                } else if (i === step) {
+                    progressStep.classList.add('active');
+                } else {
+                    progressStep.classList.remove('active', 'completed');
+                }
+            }
+
+            // Update progress line
+            const progressPercent = ((step - 1) / (totalSteps - 1)) * 100;
+            document.getElementById('progress-line').style.width = progressPercent + '%';
+        }
+
+        function validateStep(step) {
+            if (step === 1) {
+                // Check if file is uploaded
+                if (!uploadedFile) {
+                    alert('Please upload a PDF file to continue.');
+                    return false;
+                }
+            } else if (step === 2) {
+                // Check if company details are filled
+                const companyName = document.getElementById('company-name').value.trim();
+                const industry = document.getElementById('industry').value.trim();
+                const reportType = document.getElementById('report-type').value;
+
+                if (!companyName || !industry || !reportType) {
+                    alert('Please fill in all company details.');
+                    return false;
+                }
+            } else if (step === 3) {
+                // Check if at least one executive is selected
+                const selectedExecs = document.querySelectorAll('.exec-card-modern.selected');
+                if (selectedExecs.length === 0) {
+                    alert('Please select at least one executive for your panel.');
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // File Upload (Drag and Drop)
+        function initializeFileUpload() {
+            const uploadZone = document.getElementById('upload-zone');
+            const fileInput = document.getElementById('report-pdf');
+            const filePreview = document.getElementById('file-preview');
+            const fileRemove = document.getElementById('file-remove');
+            const nextBtn = document.getElementById('next-step-1');
+
+            // Click to upload
+            uploadZone?.addEventListener('click', () => fileInput.click());
+
+            // File input change
+            fileInput?.addEventListener('change', function(e) {
+                if (this.files.length > 0) {
+                    handleFileSelect(this.files[0]);
+                }
+            });
+
+            // Drag and drop
+            uploadZone?.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('drag-over');
+            });
+
+            uploadZone?.addEventListener('dragleave', () => {
+                uploadZone.classList.remove('drag-over');
+            });
+
+            uploadZone?.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('drag-over');
+
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type === 'application/pdf') {
+                    fileInput.files = files;
+                    handleFileSelect(files[0]);
+                } else {
+                    alert('Please drop a PDF file.');
+                }
+            });
+
+            // Remove file
+            fileRemove?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                uploadedFile = null;
+                fileInput.value = '';
+                filePreview.classList.remove('show');
+                nextBtn.disabled = true;
+            });
+
+            function handleFileSelect(file) {
+                uploadedFile = file;
+
+                // Show file preview
+                const fileName = document.getElementById('file-name');
+                const fileMeta = document.getElementById('file-meta');
+
+                fileName.textContent = file.name;
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                fileMeta.textContent = `${fileSizeMB} MB • PDF Document`;
+
+                filePreview.classList.add('show');
+                nextBtn.disabled = false;
+            }
+        }
+
+        // Preset Configurations
+        function initializePresets() {
+            const presetCards = document.querySelectorAll('.preset-card');
+
+            presetCards.forEach(card => {
+                card.addEventListener('click', function() {
+                    // Remove selected from all
+                    presetCards.forEach(c => c.classList.remove('selected'));
+                    // Add selected to clicked
+                    this.classList.add('selected');
+
+                    const preset = this.dataset.preset;
+                    applyPreset(preset);
+                });
+            });
+        }
+
+        function applyPreset(preset) {
+            const execCEO = document.getElementById('exec-ceo');
+            const execCFO = document.getElementById('exec-cfo');
+            const execCTO = document.getElementById('exec-cto');
+            const execCMO = document.getElementById('exec-cmo');
+            const execCOO = document.getElementById('exec-coo');
+            const questionLimit = document.getElementById('question-limit');
+
+            // Uncheck all first
+            [execCEO, execCFO, execCTO, execCMO, execCOO].forEach(exec => {
+                if (exec) {
+                    exec.checked = false;
+                    exec.closest('.exec-card-modern')?.classList.remove('selected');
+                }
+            });
+
+            if (preset === 'startup') {
+                // CEO + CFO, 10 questions
+                execCEO.checked = true;
+                execCEO.closest('.exec-card-modern').classList.add('selected');
+                execCFO.checked = true;
+                execCFO.closest('.exec-card-modern').classList.add('selected');
+                questionLimit.value = '10';
+            } else if (preset === 'mba') {
+                // Full panel, 15 questions
+                [execCEO, execCFO, execCTO, execCMO, execCOO].forEach(exec => {
+                    exec.checked = true;
+                    exec.closest('.exec-card-modern').classList.add('selected');
+                });
+                questionLimit.value = '15';
+            }
+            // custom preset doesn't pre-select anything
+
+            updateSelectionCounter();
+
+            // Update ExecutiveSimulator's internal array
+            if (window.simulator) {
+                window.simulator.updateSelectedExecutives();
+            }
+        }
+
+        // Executive Card Selection
+        function initializeExecutiveCards() {
+            const execCards = document.querySelectorAll('.exec-card-modern');
+
+            execCards.forEach(card => {
+                card.addEventListener('click', function() {
+                    const checkbox = this.querySelector('input[type="checkbox"]');
+                    checkbox.checked = !checkbox.checked;
+
+                    this.classList.toggle('selected');
+                    updateSelectionCounter();
+                    updateNextButton();
+
+                    // Update ExecutiveSimulator's internal array
+                    if (window.simulator) {
+                        window.simulator.updateSelectedExecutives();
+                    }
+                });
+            });
+        }
+
+        function updateSelectionCounter() {
+            const selected = document.querySelectorAll('.exec-card-modern.selected');
+            const counter = document.getElementById('selection-counter');
+            const countText = document.getElementById('selection-count');
+
+            if (selected.length === 0) {
+                countText.textContent = 'No executives selected';
+                counter.classList.remove('has-selections');
+            } else if (selected.length === 1) {
+                countText.textContent = '1 executive selected';
+                counter.classList.add('has-selections');
+            } else {
+                countText.textContent = `${selected.length} executives selected`;
+                counter.classList.add('has-selections');
+            }
+        }
+
+        function updateNextButton() {
+            const selected = document.querySelectorAll('.exec-card-modern.selected');
+            const nextBtn = document.getElementById('next-step-3');
+
+            if (nextBtn) {
+                nextBtn.disabled = selected.length === 0;
+            }
+        }
+
+        // Review and Populate
+        function initializeReview() {
+            // Update review when company details change
+            ['company-name', 'industry', 'report-type', 'question-limit'].forEach(id => {
+                const element = document.getElementById(id);
+                element?.addEventListener('change', populateReview);
+            });
+
+            ['allow-followups', 'enable-research'].forEach(id => {
+                const element = document.getElementById(id);
+                element?.addEventListener('change', populateReview);
+            });
+        }
+
+        function populateReview() {
+            // Company details
+            document.getElementById('review-company').textContent =
+                document.getElementById('company-name')?.value || '-';
+            document.getElementById('review-industry').textContent =
+                document.getElementById('industry')?.value || '-';
+            document.getElementById('review-report-type').textContent =
+                document.getElementById('report-type')?.options[document.getElementById('report-type')?.selectedIndex]?.text || '-';
+
+            // Session configuration
+            const questionLimit = document.getElementById('question-limit')?.value || '10';
+            document.getElementById('review-questions').textContent = questionLimit + ' questions';
+
+            // Estimate duration
+            const duration = {
+                '6': '5-7 minutes',
+                '10': '10-12 minutes',
+                '15': '15-18 minutes',
+                '20': '20-25 minutes'
+            }[questionLimit] || '10-12 minutes';
+            document.getElementById('review-duration').textContent = duration;
+
+            // Follow-ups and research
+            document.getElementById('review-followups').textContent =
+                document.getElementById('allow-followups')?.checked ? 'Enabled' : 'Disabled';
+            document.getElementById('review-research').textContent =
+                document.getElementById('enable-research')?.checked ? 'Enabled' : 'Disabled';
+
+            // Executive panel
+            const reviewExecs = document.getElementById('review-executives');
+            reviewExecs.innerHTML = '';
+
+            const selectedExecs = document.querySelectorAll('.exec-card-modern.selected');
+            selectedExecs.forEach(card => {
+                const execName = card.dataset.execName;
+                const execRole = card.dataset.role;
+
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-primary me-2 mb-2';
+                badge.style.fontSize = '0.875rem';
+                badge.style.padding = '0.5rem 0.75rem';
+                badge.innerHTML = `<i class="fas fa-user me-1"></i> ${execName} (${execRole})`;
+                reviewExecs.appendChild(badge);
+            });
+
+            if (selectedExecs.length === 0) {
+                reviewExecs.innerHTML = '<span class="text-muted">No executives selected</span>';
+            }
+        }
+
         // Enhanced JavaScript for Executive Panel Simulator
         class ExecutiveSimulator {
             constructor() {
@@ -775,11 +2048,21 @@
                     this.endSession();
                 });
                 
-                // New session
+                // New session - completely start over
                 document.getElementById('new-session-btn').addEventListener('click', () => {
                     this.newSession();
                 });
-                
+
+                // Same company, new panel
+                document.getElementById('same-company-session-btn').addEventListener('click', () => {
+                    this.sameCompanyNewSession();
+                });
+
+                // Launch panel button (from ready screen)
+                document.getElementById('launch-panel-btn').addEventListener('click', () => {
+                    this.launchPanel();
+                });
+
                 // Executive selection
                 document.querySelectorAll('.executive-card input[type="checkbox"]').forEach(checkbox => {
                     checkbox.addEventListener('change', () => {
@@ -811,10 +2094,10 @@
                     return false;
                 }
                 
-                // Check file size (16MB limit)
-                const maxSize = 16 * 1024 * 1024; // 16MB
+                // Check file size (50MB limit for Version 2)
+                const maxSize = 50 * 1024 * 1024; // 50MB
                 if (file.size > maxSize) {
-                    alert('File too large. Please upload a PDF smaller than 16MB.');
+                    alert('File too large. Please upload a PDF smaller than 50MB.');
                     document.getElementById('report-pdf').value = '';
                     return false;
                 }
@@ -825,7 +2108,9 @@
             
             updateSelectedExecutives() {
                 this.selectedExecutives = [];
-                document.querySelectorAll('.executive-card input[type="checkbox"]:checked').forEach(checkbox => {
+                // Check both old-style (.executive-card) and new wizard-style (.exec-card-modern) checkboxes
+                const selectors = '.executive-card input[type="checkbox"]:checked, .exec-card-modern input[type="checkbox"]:checked';
+                document.querySelectorAll(selectors).forEach(checkbox => {
                     this.selectedExecutives.push(checkbox.value);
                 });
             }
@@ -851,6 +2136,9 @@
                 const sessionType = document.getElementById('session-type').value;
                 const questionLimit = document.getElementById('question-limit').value;
                 const timeLimit = document.getElementById('time-limit').value;
+                // Version 2: New options
+                const allowFollowups = document.getElementById('allow-followups').checked;
+                const enableResearch = document.getElementById('enable-research').checked;
                 
                 if (!fileInput.files[0] || !companyName || !industry || !reportType) {
                     alert('Please fill in all required fields and upload a PDF report.');
@@ -873,7 +2161,10 @@
                     formData.append('industry', industry);
                     formData.append('report_type', reportType);
                     formData.append('question_limit', questionLimit);
-                    
+                    // Version 2: New options
+                    formData.append('allow_followups', allowFollowups);
+                    formData.append('enable_web_research', enableResearch);
+
                     // Append selected executives
                     this.selectedExecutives.forEach(exec => {
                         formData.append('executives[]', exec);
@@ -889,8 +2180,18 @@
                     if (data.status === 'success') {
                         this.hideUploadProgress();
                         this.reportUploaded = true;
-                        this.setupSimulationPhase();
-                        this.startPresentation(data.first_question);
+
+                        // Store first question data for when user clicks "Launch Panel"
+                        this.firstQuestionData = data.first_question;
+
+                        // Update ready screen with question count
+                        const questionCountElement = document.getElementById('ready-question-count');
+                        if (questionCountElement) {
+                            questionCountElement.textContent = questionLimit;
+                        }
+
+                        // Show ready screen instead of immediately launching
+                        this.showPhase('ready');
                     } else {
                         throw new Error(data.error || 'Failed to setup session');
                     }
@@ -940,20 +2241,21 @@
                 executiveList.innerHTML = '';
                 
                 const executives = {
-                    'CEO': { name: 'Sarah Chen', icon: 'fa-crown' },
-                    'CFO': { name: 'Michael Rodriguez', icon: 'fa-chart-line' },
-                    'CTO': { name: 'Dr. Lisa Kincaid', icon: 'fa-microchip' },
-                    'CMO': { name: 'James Thompson', icon: 'fa-bullhorn' },
-                    'COO': { name: 'Rebecca Johnson', icon: 'fa-cogs' }
+                    'CEO': { name: 'Sarah Chen', image: 'sarah_chen' },
+                    'CFO': { name: 'Michael Rodriguez', image: 'michael_rodriguez' },
+                    'CTO': { name: 'Dr. Lisa Kincaid', image: 'lisa_kincaid' },
+                    'CMO': { name: 'James Thompson', image: 'james_thompson' },
+                    'COO': { name: 'Rebecca Johnson', image: 'rebecca_johnson' }
                 };
-                
+
                 this.selectedExecutives.forEach(role => {
                     const exec = executives[role];
                     const execElement = document.createElement('div');
                     execElement.className = 'executive-member';
+                    execElement.setAttribute('data-role', role);
                     execElement.innerHTML = `
                         <div class="avatar avatar-${role}">
-                            <i class="fas ${exec.icon}"></i>
+                            <img src="/static/images/executives/${exec.image}.png" alt="${exec.name}" onerror="this.style.display='none'">
                         </div>
                         <div class="info">
                             <div class="name">${exec.name}</div>
@@ -1018,20 +2320,35 @@
                 if (message && message.executive) {
                     this.highlightCurrentExecutive(message.executive);
                 }
-    
+
                 // Show actual message (always do this)
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'executive-message';
-    
+
+                // Version 2: Add headshot if available
+                const headshotHTML = message.image
+                    ? `<img src="/static/images/executives/${message.image}.png" alt="${message.name}" class="executive-headshot" onerror="this.style.display='none'">`
+                    : '';
+
+                const followupBadge = message.is_followup
+                    ? '<span class="badge bg-info ms-2">Follow-up</span>'
+                    : '';
+
                 messageDiv.innerHTML = `
-                    <div class="executive-header">
-                        <strong>${message.name}</strong>
-                        <span class="executive-title">${message.title}</span>
+                    <div class="executive-message-container">
+                        ${headshotHTML}
+                        <div class="executive-message-content">
+                            <div class="executive-header">
+                                <strong>${message.name}</strong>
+                                <span class="executive-title">${message.title}</span>
+                                ${followupBadge}
+                            </div>
+                            <div class="executive-question">${message.question}</div>
+                            <div class="message-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
+                        </div>
                     </div>
-                    <div class="executive-question">${message.question}</div>
-                    <div class="message-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
                 `;
-    
+
                 conversationArea.appendChild(messageDiv);
                 conversationArea.scrollTop = conversationArea.scrollHeight;
             }
@@ -1211,9 +2528,15 @@
             
             async endSession() {
                 try {
+                    // Stop any playing audio
+                    if (this.audioElement) {
+                        this.audioElement.pause();
+                        this.audioElement.src = '';
+                    }
+
                     const response = await fetch('/end_session', { method: 'POST' });
                     const data = await response.json();
-                    
+
                     if (data.status === 'success') {
                         this.showSessionSummary(data.summary);
                     }
@@ -1255,23 +2578,79 @@
                 this.showPhase('summary');
             }
             
+            sameCompanyNewSession() {
+                // Keep company data and file, just reset executive selection
+                this.selectedExecutives = [];
+                this.currentExecutive = null;
+                this.sessionEnding = false;
+
+                // Uncheck all executive cards (both old and new style)
+                document.querySelectorAll('.executive-card input[type="checkbox"], .exec-card-modern input[type="checkbox"]').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                document.querySelectorAll('.executive-card, .exec-card-modern').forEach(card => {
+                    card.classList.remove('selected');
+                });
+
+                // Update counter
+                if (typeof updateSelectionCounter === 'function') {
+                    updateSelectionCounter();
+                }
+
+                // Go to setup phase and jump to step 3 (executive selection)
+                this.showPhase('setup');
+                if (typeof goToStep === 'function') {
+                    setTimeout(() => goToStep(3), 100);
+                }
+            }
+
             newSession() {
+                // Complete reset - start from scratch
                 this.selectedExecutives = [];
                 this.currentExecutive = null;
                 this.reportUploaded = false;
                 this.sessionEnding = false;
-                
+
+                // Reset form
                 document.getElementById('setup-form').reset();
-                document.querySelectorAll('.executive-card input[type="checkbox"]').forEach(checkbox => {
+
+                // Uncheck all executive cards (both old and new style)
+                document.querySelectorAll('.executive-card input[type="checkbox"], .exec-card-modern input[type="checkbox"]').forEach(checkbox => {
                     checkbox.checked = false;
                 });
-                
+                document.querySelectorAll('.executive-card, .exec-card-modern').forEach(card => {
+                    card.classList.remove('selected');
+                });
+
+                // Reset uploaded file
+                if (typeof uploadedFile !== 'undefined') {
+                    uploadedFile = null;
+                }
+                const filePreview = document.getElementById('file-preview');
+                if (filePreview) {
+                    filePreview.classList.remove('show');
+                }
+
                 // Reset session type display
                 this.toggleSessionType('questions');
-                
+
+                // Go to setup phase and step 1
                 this.showPhase('setup');
+                if (typeof goToStep === 'function') {
+                    setTimeout(() => goToStep(1), 100);
+                }
             }
             
+            launchPanel() {
+                // Called when user clicks "Launch Panel" button from ready screen
+                if (this.firstQuestionData) {
+                    this.setupSimulationPhase();
+                    this.startPresentation(this.firstQuestionData);
+                } else {
+                    alert('Error: No question data available. Please try uploading your report again.');
+                }
+            }
+
             scrollToBottom() {
                 const conversationArea = document.getElementById('conversation-area');
                 conversationArea.scrollTop = conversationArea.scrollHeight;
@@ -1310,12 +2689,17 @@
             }
                 highlightCurrentExecutive(executiveRole) {
                 // Remove active class from all executives
-                document.querySelectorAll('.executive-card').forEach(card => {
+                document.querySelectorAll('.executive-card, .executive-member').forEach(card => {
                     card.classList.remove('active');
                 });
-                
-                // Add active class to current executive
-                // Map role to name
+
+                // Add active class to current executive using data-role attribute
+                const activeElement = document.querySelector(`.executive-member[data-role="${executiveRole}"]`);
+                if (activeElement) {
+                    activeElement.classList.add('active');
+                }
+
+                // Also highlight in wizard cards (if visible)
                 const roleMap = {
                     'CEO': 'Sarah Chen',
                     'CFO': 'Michael Rodriguez',
@@ -1323,9 +2707,9 @@
                     'CMO': 'James Thompson',
                     'COO': 'Rebecca Johnson'
                 };
-                
+
                 const executiveName = roleMap[executiveRole];
-                
+
                 // Find and highlight the executive card
                 document.querySelectorAll('.executive-card').forEach(card => {
                     const nameElement = card.querySelector('h6, .executive-name, strong');
@@ -1356,7 +2740,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            new ExecutiveSimulator();
+            window.simulator = new ExecutiveSimulator();
         });
     </script>
        <!-- Audio Recorder Script -->
