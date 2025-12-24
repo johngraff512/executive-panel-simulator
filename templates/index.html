@@ -855,19 +855,19 @@
                     <div class="progress-line" id="progress-line" style="width: 0%"></div>
                     <div class="progress-step active" data-step="1">
                         <div class="progress-step-circle">1</div>
-                        <div class="progress-step-label">Upload</div>
+                        <div class="progress-step-label">Upload Your Report</div>
                     </div>
                     <div class="progress-step" data-step="2">
                         <div class="progress-step-circle">2</div>
-                        <div class="progress-step-label">Company</div>
+                        <div class="progress-step-label">Enter Company Details</div>
                     </div>
                     <div class="progress-step" data-step="3">
                         <div class="progress-step-circle">3</div>
-                        <div class="progress-step-label">Panel</div>
+                        <div class="progress-step-label">Configure Executive Panel</div>
                     </div>
                     <div class="progress-step" data-step="4">
                         <div class="progress-step-circle">4</div>
-                        <div class="progress-step-label">Launch</div>
+                        <div class="progress-step-label">Launch Session</div>
                     </div>
                 </div>
 
@@ -1654,6 +1654,11 @@
             // custom preset doesn't pre-select anything
 
             updateSelectionCounter();
+
+            // Update ExecutiveSimulator's internal array
+            if (window.simulator) {
+                window.simulator.updateSelectedExecutives();
+            }
         }
 
         // Executive Card Selection
@@ -1668,6 +1673,11 @@
                     this.classList.toggle('selected');
                     updateSelectionCounter();
                     updateNextButton();
+
+                    // Update ExecutiveSimulator's internal array
+                    if (window.simulator) {
+                        window.simulator.updateSelectedExecutives();
+                    }
                 });
             });
         }
@@ -1886,7 +1896,9 @@
             
             updateSelectedExecutives() {
                 this.selectedExecutives = [];
-                document.querySelectorAll('.executive-card input[type="checkbox"]:checked').forEach(checkbox => {
+                // Check both old-style (.executive-card) and new wizard-style (.exec-card-modern) checkboxes
+                const selectors = '.executive-card input[type="checkbox"]:checked, .exec-card-modern input[type="checkbox"]:checked';
+                document.querySelectorAll(selectors).forEach(checkbox => {
                     this.selectedExecutives.push(checkbox.value);
                 });
             }
@@ -2444,7 +2456,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            new ExecutiveSimulator();
+            window.simulator = new ExecutiveSimulator();
         });
     </script>
        <!-- Audio Recorder Script -->
