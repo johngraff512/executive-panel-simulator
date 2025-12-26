@@ -430,10 +430,29 @@ def analyze_document_with_ai(document_text, vision_analysis, company_name, indus
         return generate_template_key_details(company_name, industry, report_type)
 
     try:
-        # Use full content - no truncation for complete analysis
-        combined_content = f"TEXT CONTENT:\n{document_text}\n\n"
-        if vision_analysis:
-            combined_content += f"VISUAL ANALYSIS:\n{vision_analysis}"
+        # Intelligently truncate to stay under token limits (~20K tokens ≈ 80K chars)
+        # Priority: beginning, end, and middle sections for comprehensive coverage
+        MAX_TEXT_CHARS = 60000  # ~15K tokens
+        MAX_VISION_CHARS = 20000  # ~5K tokens
+
+        truncated_text = document_text
+        if len(document_text) > MAX_TEXT_CHARS:
+            # Take first 40%, last 40%, and sample from middle 20%
+            first_part = document_text[:int(MAX_TEXT_CHARS * 0.4)]
+            last_part = document_text[-int(MAX_TEXT_CHARS * 0.4):]
+            middle_start = len(document_text) // 2 - int(MAX_TEXT_CHARS * 0.1)
+            middle_part = document_text[middle_start:middle_start + int(MAX_TEXT_CHARS * 0.2)]
+            truncated_text = f"{first_part}\n\n... [middle section] ...\n\n{middle_part}\n\n... [continuing] ...\n\n{last_part}"
+            print(f"⚠️ Large document truncated: {len(document_text)} → {len(truncated_text)} chars for analysis")
+
+        truncated_vision = vision_analysis
+        if vision_analysis and len(vision_analysis) > MAX_VISION_CHARS:
+            truncated_vision = vision_analysis[:MAX_VISION_CHARS] + "... [truncated]"
+            print(f"⚠️ Vision analysis truncated: {len(vision_analysis)} → {len(truncated_vision)} chars")
+
+        combined_content = f"TEXT CONTENT:\n{truncated_text}\n\n"
+        if truncated_vision:
+            combined_content += f"VISUAL ANALYSIS:\n{truncated_vision}"
 
         prompt = f"""Analyze this {report_type} document for {company_name} in the {industry} industry.
 

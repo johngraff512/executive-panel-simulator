@@ -88,11 +88,12 @@ def create_session(session_id, company_name, industry, report_type,
                   selected_executives, report_content, key_details,
                   question_limit, allow_followups=False, enable_web_research=False,
                   company_research=None):
-    """Create a new session"""
+    """Create a new session (or replace existing if session_id already exists)"""
     with get_db() as conn:
         cursor = conn.cursor()
+        # Use INSERT OR REPLACE to handle retries gracefully
         cursor.execute('''
-            INSERT INTO sessions
+            INSERT OR REPLACE INTO sessions
             (session_id, company_name, industry, report_type, selected_executives,
              report_content, key_details, question_limit, allow_followups,
              enable_web_research, company_research, used_topics)
