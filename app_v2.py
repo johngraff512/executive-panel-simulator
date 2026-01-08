@@ -373,9 +373,10 @@ def comprehensive_pdf_extraction(pdf_file, analyze_images_flag=True):
     tables_data = extract_tables_with_pdfplumber(pdf_bytes)
 
     # Step 3: Analyze embedded images with Vision API (optional, can be disabled for cost savings)
+    # Reduced from 10 to 5 images for better performance (saves ~40 seconds)
     image_descriptions = []
     if analyze_images_flag and images:
-        image_descriptions = analyze_images_with_vision(images, max_images=10)
+        image_descriptions = analyze_images_with_vision(images, max_images=5)
 
     # Step 4: Combine everything into formatted content for AI analysis
     combined_content = f"""
@@ -921,17 +922,16 @@ def upload_report():
             print(f"✅ Comprehensive extraction complete: {len(report_text)} characters")
             print(f"   📊 Tables: {len(extraction_result['tables'])}, 🖼️ Images: {len(extraction_result['images'])} (analyzed: {len(extraction_result['image_descriptions'])})")
 
-            # OPTIONAL: Also analyze full PDF pages with Vision API for additional context
-            # This adds full-page visual analysis on top of embedded image analysis
+            # OPTIONAL: Full-page Vision analysis (DISABLED - redundant with embedded image analysis)
+            # Embedded image analysis already captures visual content from charts/graphs
+            # Enabling this adds 40-60 seconds for minimal additional value
             vision_analysis = None
-            vision_analysis, page_count = analyze_pdf_with_vision(
-                temp_pdf_path, company_name, industry, report_type
-            )
+            # vision_analysis, page_count = analyze_pdf_with_vision(
+            #     temp_pdf_path, company_name, industry, report_type
+            # )
 
-            # Combine comprehensive extraction with optional full-page vision analysis
+            # Use comprehensive extraction (text + tables + embedded images)
             full_content = report_text  # Already includes text + tables + embedded images
-            if vision_analysis:
-                full_content += f"\n\nADDITIONAL PAGE-LEVEL VISUAL ANALYSIS:\n{vision_analysis}"
 
             # NEW: Optional web research
             company_research = None
