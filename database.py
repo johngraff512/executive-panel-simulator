@@ -203,6 +203,53 @@ def get_responses(session_id):
         ''', (session_id,))
         return [dict(row) for row in cursor.fetchall()]
 
+def get_conversation_history(session_id, limit=5):
+    """Get recent conversation history (Q&A pairs) for context
+
+    Args:
+        session_id: Session identifier
+        limit: Number of recent Q&A pairs to retrieve (default 5)
+
+    Returns:
+        List of dicts with 'question', 'executive', and 'response' keys
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Get questions with their corresponding responses
+        cursor.execute('''
+            SELECT
+                q.executive,
+                q.executive_name,
+                q.question_text,
+                q.timestamp as question_time,
+                r.response_text,
+                r.timestamp as response_time
+            FROM questions q
+            LEFT JOIN responses r ON q.session_id = r.session_id
+                AND r.id = (
+                    SELECT MIN(r2.id)
+                    FROM responses r2
+                    WHERE r2.session_id = q.session_id
+                    AND r2.timestamp > q.timestamp
+                )
+            WHERE q.session_id = ?
+            ORDER BY q.id DESC
+            LIMIT ?
+        ''', (session_id, limit))
+
+        history = []
+        for row in cursor.fetchall():
+            history.append({
+                'executive': row['executive'],
+                'executive_name': row['executive_name'],
+                'question': row['question_text'],
+                'response': row['response_text'] if row['response_text'] else '[No response yet]'
+            })
+
+        # Return in chronological order (oldest first)
+        return list(reversed(history))
+
 def delete_session(session_id):
     """Delete a session and all related data"""
     with get_db() as conn:

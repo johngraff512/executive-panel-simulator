@@ -497,7 +497,7 @@ Document:
 {combined_content}"""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are an expert strategy consultant who identifies specific recommendations and analyses in business plans that executives would challenge. Extract concrete, specific items that can be questioned. You must return only valid JSON."},
                 {"role": "user", "content": prompt}
@@ -558,7 +558,7 @@ def research_company_online(company_name):
 Provide factual, verifiable information. If you don't have current information, indicate what's uncertain."""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are a business research analyst providing factual company information."},
                 {"role": "user", "content": search_prompt}
@@ -583,10 +583,11 @@ Provide factual, verifiable information. If you don't have current information, 
 # ========== Question Generation ==========
 def generate_ai_questions_with_topic_diversity(report_content, executive, company_name,
                                                industry, report_type, all_key_details,
-                                               used_topics, question_number, company_research=None):
+                                               used_topics, question_number, company_research=None,
+                                               conversation_history=None):
     """
     Generate AI questions ensuring topic diversity
-    Now enhanced with company research context
+    Now enhanced with company research context and conversation history
     """
     if not openai_available or not openai_client:
         return generate_template_question(executive, question_number), f"topic_{question_number}"
@@ -618,27 +619,52 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
         if company_research:
             research_context = f"\nRecent company research: {company_research.get('summary', '')[:300]}"
 
+        # Format conversation history for context
+        conversation_context = ""
+        if conversation_history and len(conversation_history) > 0:
+            conversation_context = "\n\nPREVIOUS CONVERSATION:\n"
+            for i, qa in enumerate(conversation_history[-5:], 1):  # Last 5 Q&As
+                conversation_context += f"\nQ{i} ({qa['executive']}): {qa['question']}\n"
+                conversation_context += f"A{i}: {qa['response'][:200]}{'...' if len(qa['response']) > 200 else ''}\n"
+
+            # Extract topics already covered
+            covered_topics = set()
+            for qa in conversation_history:
+                # Simple keyword extraction from questions
+                if 'market' in qa['question'].lower():
+                    covered_topics.add('market analysis')
+                if 'financial' in qa['question'].lower() or 'revenue' in qa['question'].lower():
+                    covered_topics.add('financial projections')
+                if 'customer' in qa['question'].lower():
+                    covered_topics.add('customer acquisition')
+
+            if covered_topics:
+                conversation_context += f"\nTopics already discussed: {', '.join(covered_topics)}\n"
+
         prompt = f"""You are the {executive} of a company evaluating this {report_type} from {company_name} in the {industry} industry.
 
 The presenter has made this specific recommendation or analysis:
 {selected_topic}
 
-Your role focuses on: {focus}{research_context}
+Your role focuses on: {focus}{research_context}{conversation_context}
 
 Generate ONE tough, probing question that CHALLENGES or CLARIFIES this specific recommendation/analysis. Your question should:
 
 1. DIRECTLY REFERENCE what they proposed or analyzed (use specifics from the topic above)
-2. Challenge one of these aspects:
+2. NOT repeat topics already covered in previous questions (if any are listed above)
+3. Build on or reference the presenter's previous responses when relevant
+4. Challenge one of these aspects:
    - The underlying assumptions or logic
    - The feasibility or resource requirements
    - The competitive response or market dynamics
    - The financial projections or ROI
    - Alternative approaches they didn't consider
    - Risk factors they may have overlooked
+   - Inconsistencies with their previous answers
 
-3. Be direct and conversational (as if speaking to the presenter face-to-face)
-4. Push them to defend or clarify their thinking
-5. Be 1-2 sentences maximum
+5. Be direct and conversational (as if speaking to the presenter face-to-face)
+6. Push them to defend or clarify their thinking
+7. Be 1-2 sentences maximum
 
 IMPORTANT - Strategic Management terminology:
 - Use "strategy" (singular) for overall business strategy or integrated set of choices
@@ -654,7 +680,7 @@ Examples of good challenging questions:
 Return ONLY the question text, no preamble or explanation."""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": f"You are a tough, experienced {executive} evaluating a business plan. Your job is to identify weak spots, challenge assumptions, and push presenters to think deeper. Reference specific details from their proposal and ask pointed questions that expose gaps in their thinking. Use precise strategic management terminology: 'strategy' for overall direction, 'strategic initiatives' or 'actions' for specific programs."},
                 {"role": "user", "content": prompt}
@@ -708,7 +734,7 @@ OR if no follow-up is needed:
 Only request a follow-up if the response is vague, incomplete, or raises new concerns."""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are an executive deciding if clarification is needed. You must return only valid JSON."},
                 {"role": "user", "content": prompt}
@@ -921,7 +947,8 @@ def upload_report():
             first_executive = selected_executives[0]
             first_question, first_topic = generate_ai_questions_with_topic_diversity(
                 full_content, first_executive, company_name, industry, report_type,
-                key_details, [], 1, company_research
+                key_details, [], 1, company_research,
+                conversation_history=[]  # First question, no history yet
             )
 
             # Generate TTS for first question
@@ -1102,6 +1129,9 @@ def respond_to_executive():
         used_topics = session_data['used_topics']
         company_research = session_data.get('company_research')
 
+        # Get conversation history for context
+        conversation_history = db.get_conversation_history(sid, limit=5)
+
         next_question, next_topic = generate_ai_questions_with_topic_diversity(
             session_data['report_content'],
             next_exec,
@@ -1111,7 +1141,8 @@ def respond_to_executive():
             key_details,
             used_topics,
             next_count,
-            company_research
+            company_research,
+            conversation_history=conversation_history
         )
 
         exec_name = get_executive_name(next_exec)
@@ -1277,6 +1308,9 @@ def respond_to_executive_audio():
             used_topics = session_data['used_topics']
             company_research = session_data.get('company_research')
 
+            # Get conversation history for context
+            conversation_history = db.get_conversation_history(sid, limit=5)
+
             next_question, next_topic = generate_ai_questions_with_topic_diversity(
                 session_data['report_content'],
                 next_exec,
@@ -1286,7 +1320,8 @@ def respond_to_executive_audio():
                 key_details,
                 used_topics,
                 next_count,
-                company_research
+                company_research,
+                conversation_history=conversation_history
             )
 
             exec_name = get_executive_name(next_exec)
