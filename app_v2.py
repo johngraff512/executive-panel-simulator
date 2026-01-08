@@ -170,6 +170,60 @@ def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
         return None, None
 
 # ========== Enhanced PDF Processing with PyMuPDF + pdfplumber ==========
+
+def truncate_at_appendix(text_content):
+    """
+    Intelligently detect and truncate text at the start of appendices section
+
+    Looks for appendix section headers (not just mentions in TOC):
+    - "Appendix A", "Appendix 1", "APPENDIX", "Appendices"
+    - Must appear as a section header (after page breaks, with formatting)
+    - Avoids false positives from TOC or inline mentions
+
+    Returns:
+        tuple: (truncated_text, was_truncated, removed_chars)
+    """
+    import re
+
+    # Patterns that indicate start of appendix section
+    # Look for appendix keywords that appear as section headers
+    patterns = [
+        # "Appendix A" or "Appendix 1" etc. at start of line after page break
+        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*Appendix\s+[A-Z0-9]',
+        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*APPENDIX\s+[A-Z0-9]',
+
+        # "Appendix" or "APPENDIX" followed by colon or newline (section header style)
+        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*Appendix\s*[:\n]',
+        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*APPENDIX\s*[:\n]',
+
+        # "Appendices" as section header
+        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*Appendices\s*[:\n]',
+        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*APPENDICES\s*[:\n]',
+
+        # Alternative: Multiple newlines + "Appendix" at line start
+        r'\n\n\n+\s*Appendix\s+[A-Z0-9]',
+        r'\n\n\n+\s*APPENDIX\s+[A-Z0-9]',
+        r'\n\n\n+\s*Appendices\s*[:\n]',
+    ]
+
+    earliest_match = None
+    earliest_pos = len(text_content)
+
+    for pattern in patterns:
+        match = re.search(pattern, text_content, re.IGNORECASE)
+        if match and match.start() < earliest_pos:
+            earliest_pos = match.start()
+            earliest_match = match
+
+    if earliest_match:
+        truncated = text_content[:earliest_pos].strip()
+        removed = len(text_content) - len(truncated)
+        print(f"📋 Appendix detected at position {earliest_pos}")
+        print(f"   Truncating {removed:,} characters ({removed/len(text_content)*100:.1f}% of document)")
+        return truncated, True, removed
+
+    return text_content, False, 0
+
 def extract_text_and_images_with_pymupdf(pdf_bytes):
     """Extract text and images using PyMuPDF (fast and comprehensive)"""
     try:
@@ -202,6 +256,9 @@ def extract_text_and_images_with_pymupdf(pdf_bytes):
                     })
                 except Exception as e:
                     print(f"⚠️ Could not extract image {img_index} from page {page_num + 1}: {e}")
+
+        # Truncate at appendix before returning
+        text_content, was_truncated, removed_chars = truncate_at_appendix(text_content)
 
         print(f"✅ PyMuPDF: Extracted {len(text_content)} chars of text and {len(images)} images")
         return text_content.strip(), images
