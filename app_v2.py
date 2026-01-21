@@ -41,12 +41,14 @@ CST = pytz.timezone('America/Chicago')
 # Flask session ID is used as the cache key (only small session ID stored in cookie)
 
 def get_flask_session_id():
-    """Get Flask session ID for cache key (creates session if needed)"""
-    # Access session to ensure it's created
-    if 'initialized' not in session:
-        session['initialized'] = True
-    # The session ID is automatically managed by Flask
-    return session.sid
+    """Get or create a unique cache ID stored in Flask session"""
+    # Create a unique cache ID and store it in the session cookie
+    # This small UUID (~36 chars) fits easily in cookie, used as DB lookup key
+    if 'cache_id' not in session:
+        import uuid
+        session['cache_id'] = str(uuid.uuid4())
+        print(f"🆔 Created new cache ID: {session['cache_id'][:20]}...")
+    return session['cache_id']
 
 def cache_extraction(extraction_result):
     """Cache extraction results in database"""
