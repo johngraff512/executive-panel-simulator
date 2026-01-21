@@ -36,45 +36,51 @@ CST = pytz.timezone('America/Chicago')
 # ============================================================================
 # PROGRESSIVE ANALYSIS CACHE (Option C Implementation)
 # ============================================================================
-# In-memory cache for progressive background analysis
-# Structure: {temp_session_id: {'extraction': ..., 'ai_analysis': ..., 'web_research': ...}}
-ANALYSIS_CACHE = {}
+# Use Flask session for progressive background analysis cache
+# Flask sessions persist across Gunicorn workers via cookies
+# Structure: session['progressive_cache'] = {'extraction': ..., 'ai_analysis': ..., 'web_research': ...}
 
 def get_temp_session_id():
     """Generate a temporary session ID for caching extraction results"""
-    import uuid
-    return f"temp_{uuid.uuid4()}"
+    if 'temp_session_id' not in session:
+        import uuid
+        session['temp_session_id'] = f"temp_{uuid.uuid4()}"
+    return session['temp_session_id']
 
-def cache_extraction(temp_session_id, extraction_result):
-    """Cache extraction results for later use"""
-    if temp_session_id not in ANALYSIS_CACHE:
-        ANALYSIS_CACHE[temp_session_id] = {}
-    ANALYSIS_CACHE[temp_session_id]['extraction'] = extraction_result
-    print(f"💾 Cached extraction for {temp_session_id}")
+def cache_extraction(extraction_result):
+    """Cache extraction results in Flask session"""
+    if 'progressive_cache' not in session:
+        session['progressive_cache'] = {}
+    session['progressive_cache']['extraction'] = extraction_result
+    session.modified = True  # Force session update
+    print(f"💾 Cached extraction in session")
 
-def cache_ai_analysis(temp_session_id, key_details):
-    """Cache AI analysis results"""
-    if temp_session_id not in ANALYSIS_CACHE:
-        ANALYSIS_CACHE[temp_session_id] = {}
-    ANALYSIS_CACHE[temp_session_id]['ai_analysis'] = key_details
-    print(f"💾 Cached AI analysis for {temp_session_id}")
+def cache_ai_analysis(key_details):
+    """Cache AI analysis results in Flask session"""
+    if 'progressive_cache' not in session:
+        session['progressive_cache'] = {}
+    session['progressive_cache']['ai_analysis'] = key_details
+    session.modified = True
+    print(f"💾 Cached AI analysis in session")
 
-def cache_web_research(temp_session_id, company_research):
-    """Cache web research results"""
-    if temp_session_id not in ANALYSIS_CACHE:
-        ANALYSIS_CACHE[temp_session_id] = {}
-    ANALYSIS_CACHE[temp_session_id]['web_research'] = company_research
-    print(f"💾 Cached web research for {temp_session_id}")
+def cache_web_research(company_research):
+    """Cache web research results in Flask session"""
+    if 'progressive_cache' not in session:
+        session['progressive_cache'] = {}
+    session['progressive_cache']['web_research'] = company_research
+    session.modified = True
+    print(f"💾 Cached web research in session")
 
-def get_cached_data(temp_session_id):
-    """Retrieve all cached data for a temp session"""
-    return ANALYSIS_CACHE.get(temp_session_id, {})
+def get_cached_data():
+    """Retrieve all cached data from Flask session"""
+    return session.get('progressive_cache', {})
 
-def clear_cache(temp_session_id):
+def clear_cache():
     """Clear cached data after session is created"""
-    if temp_session_id in ANALYSIS_CACHE:
-        del ANALYSIS_CACHE[temp_session_id]
-        print(f"🗑️ Cleared cache for {temp_session_id}")
+    if 'progressive_cache' in session:
+        del session['progressive_cache']
+        session.modified = True
+        print(f"🗑️ Cleared progressive cache from session")
 # ============================================================================
 
 # Initialize Flask app
@@ -980,7 +986,7 @@ def index():
 def upload_pdf():
     """
     Step 1: Handle PDF upload and start extraction immediately
-    Returns temp_session_id for tracking through wizard
+    Stores results in Flask session (persists across Gunicorn workers)
     """
     try:
         if 'report' not in request.files:
@@ -995,7 +1001,7 @@ def upload_pdf():
 
         print(f"📄 Starting PDF extraction...")
 
-        # Generate temp session ID
+        # Generate temp session ID (stored in Flask session)
         temp_session_id = get_temp_session_id()
 
         # Save PDF temporarily
@@ -1017,8 +1023,8 @@ def upload_pdf():
             print(f"✅ Extraction complete: {len(report_text)} characters")
             print(f"   📊 Tables: {len(extraction_result['tables'])}, 🖼️ Images: {len(extraction_result['images'])}")
 
-            # Cache extraction results
-            cache_extraction(temp_session_id, {
+            # Cache extraction results in Flask session
+            cache_extraction({
                 'combined_content': report_text,
                 'tables': extraction_result['tables'],
                 'images': extraction_result['images'],
@@ -1027,7 +1033,6 @@ def upload_pdf():
 
             return jsonify({
                 'status': 'success',
-                'temp_session_id': temp_session_id,
                 'extraction_complete': True,
                 'char_count': len(report_text),
                 'table_count': len(extraction_result['tables']),
@@ -1050,20 +1055,16 @@ def upload_pdf():
 def analyze_content():
     """
     Step 2: Perform AI analysis with company context
-    Uses cached extraction from Step 1
+    Uses cached extraction from Step 1 (Flask session)
     """
     try:
         data = request.get_json()
-        temp_session_id = data.get('temp_session_id')
         company_name = data.get('company_name', 'Your Company')
         industry = data.get('industry', 'Technology')
         report_type = data.get('report_type', 'Business Plan')
 
-        if not temp_session_id:
-            return jsonify({'status': 'error', 'error': 'Missing temp_session_id'})
-
-        # Get cached extraction
-        cached_data = get_cached_data(temp_session_id)
+        # Get cached extraction from Flask session
+        cached_data = get_cached_data()
         if 'extraction' not in cached_data:
             return jsonify({'status': 'error', 'error': 'Extraction data not found. Please re-upload PDF.'})
 
@@ -1077,8 +1078,8 @@ def analyze_content():
             report_text, None, company_name, industry, report_type
         )
 
-        # Cache AI analysis
-        cache_ai_analysis(temp_session_id, key_details)
+        # Cache AI analysis in Flask session
+        cache_ai_analysis(key_details)
 
         return jsonify({
             'status': 'success',
@@ -1097,22 +1098,18 @@ def analyze_content():
 def research_company_endpoint():
     """
     Step 3: Optional web research for company background
-    Uses cached data from previous steps
+    Uses cached data from previous steps (Flask session)
     """
     try:
         data = request.get_json()
-        temp_session_id = data.get('temp_session_id')
         company_name = data.get('company_name')
         enable_web_research = data.get('enable_web_research', False)
-
-        if not temp_session_id:
-            return jsonify({'status': 'error', 'error': 'Missing temp_session_id'})
 
         company_research = None
         if enable_web_research and company_name:
             print(f"🌐 Researching {company_name} online...")
             company_research = research_company_online(company_name)
-            cache_web_research(temp_session_id, company_research)
+            cache_web_research(company_research)
 
         return jsonify({
             'status': 'success',
@@ -1135,7 +1132,6 @@ def launch_panel():
     """
     try:
         data = request.get_json()
-        temp_session_id = data.get('temp_session_id')
         company_name = data.get('company_name', 'Your Company')
         industry = data.get('industry', 'Technology')
         report_type = data.get('report_type', 'Business Plan')
@@ -1144,15 +1140,15 @@ def launch_panel():
         allow_followups = data.get('allow_followups', False)
         enable_web_research = data.get('enable_web_research', False)
 
-        if not temp_session_id:
-            return jsonify({'status': 'error', 'error': 'Missing temp_session_id'})
-
         if not selected_executives:
             return jsonify({'status': 'error', 'error': 'Please select at least one executive'})
 
-        # Get all cached data
-        cached_data = get_cached_data(temp_session_id)
+        # Get all cached data from Flask session
+        cached_data = get_cached_data()
         if 'extraction' not in cached_data or 'ai_analysis' not in cached_data:
+            # Debug logging
+            print(f"❌ Cache check failed!")
+            print(f"   Cache keys present: {list(cached_data.keys())}")
             return jsonify({'status': 'error', 'error': 'Required analysis data not found. Please restart wizard.'})
 
         extraction = cached_data['extraction']
@@ -1204,8 +1200,8 @@ def launch_panel():
         # Update session with first topic used
         db.update_session(sid, used_topics=[first_topic], current_question_count=1)
 
-        # Clear cache now that session is created
-        clear_cache(temp_session_id)
+        # Clear progressive cache now that session is created
+        clear_cache()
 
         print(f"🎯 {first_executive} asking first question")
         print(f"💾 Session {sid} created in database")

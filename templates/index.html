@@ -1638,8 +1638,7 @@
         let uploadedFile = null;
         const totalSteps = 4;
 
-        // Progressive analysis tracking
-        let tempSessionId = null;
+        // Progressive analysis tracking (no temp_session_id needed - Flask session handles it)
         let extractionComplete = false;
         let analysisComplete = false;
         let researchComplete = false;
@@ -1776,10 +1775,8 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    tempSessionId = data.temp_session_id;
                     extractionComplete = true;
                     console.log(`✅ Extraction complete: ${data.char_count} chars, ${data.table_count} tables, ${data.image_count} images`);
-                    console.log(`📝 Temp session ID: ${tempSessionId}`);
 
                     // Hide extraction status and show success
                     if (extractionStatus) {
@@ -1823,8 +1820,8 @@
         async function startAIAnalysis() {
             console.log('🔍 Step 2→3: Starting AI analysis in background...');
 
-            if (!tempSessionId) {
-                console.warn('⚠️ No temp session ID, skipping analysis');
+            if (!extractionComplete) {
+                console.warn('⚠️ Extraction not complete, skipping analysis');
                 return;
             }
 
@@ -1839,7 +1836,6 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        temp_session_id: tempSessionId,
                         company_name: companyName,
                         industry: industry,
                         report_type: reportType
@@ -1862,8 +1858,8 @@
         async function startWebResearch() {
             console.log('🌐 Step 3→4: Starting web research in background...');
 
-            if (!tempSessionId) {
-                console.warn('⚠️ No temp session ID, skipping research');
+            if (!extractionComplete) {
+                console.warn('⚠️ Extraction not complete, skipping research');
                 return;
             }
 
@@ -1877,7 +1873,6 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        temp_session_id: tempSessionId,
                         company_name: companyName,
                         enable_web_research: enableResearch
                     })
@@ -2327,15 +2322,9 @@
 
                 // Show upload progress (fast now - only 3 seconds!)
                 this.showUploadProgress();
-                
-                // PROGRESSIVE ANALYSIS: Check if temp session exists
-                if (!tempSessionId) {
-                    alert('Session data not found. Please restart from Step 1.');
-                    return;
-                }
 
                 try {
-                    // Call launch_panel endpoint with all cached data
+                    // Call launch_panel endpoint with all cached data (stored in Flask session)
                     // All analysis already done progressively, this takes only ~3 seconds
                     const response = await fetch('/launch_panel', {
                         method: 'POST',
@@ -2343,7 +2332,6 @@
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
-                            temp_session_id: tempSessionId,
                             company_name: companyName,
                             industry: industry,
                             report_type: reportType,
