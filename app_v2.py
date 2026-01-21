@@ -1017,11 +1017,11 @@ def upload_pdf():
             print(f"✅ Extraction complete: {len(report_text)} characters")
             print(f"   📊 Tables: {len(extraction_result['tables'])}, 🖼️ Images: {len(extraction_result['images'])}")
 
-            # Cache extraction results in Flask session
+            # Cache extraction results (exclude raw image bytes - only metadata)
             cache_extraction({
                 'combined_content': report_text,
                 'tables': extraction_result['tables'],
-                'images': extraction_result['images'],
+                'image_count': len(extraction_result['images']),  # Just count, not bytes
                 'image_descriptions': extraction_result['image_descriptions']
             })
 
