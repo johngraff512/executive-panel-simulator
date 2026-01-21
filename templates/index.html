@@ -1056,6 +1056,13 @@
                                     </button>
                                 </div>
 
+                                <!-- Progressive Analysis Status -->
+                                <div id="extraction-status" class="alert alert-info tw-mt-3" style="display: none;">
+                                    <i class="fas fa-cog fa-spin tw-mr-2"></i>
+                                    <strong>Extracting PDF content...</strong>
+                                    <small class="tw-block tw-mt-1">This will take about 1 minute. You can continue to the next step once complete.</small>
+                                </div>
+
                                 <div class="tw-flex tw-justify-end tw-mt-6">
                                     <button type="button" class="btn btn-primary btn-lg" id="next-step-1" disabled>
                                         Next: Company Details
@@ -1372,7 +1379,7 @@
                                     </div>
                                     <small class="text-muted tw-mt-2 tw-block">
                                         <i class="fas fa-spinner fa-spin tw-mr-2"></i>
-                                        Analyzing your report with AI... This may take 1-3 minutes for comprehensive PDF analysis (text, tables, images, and optional web research).
+                                        Generating first question... (Analysis completed in background during setup)
                                     </small>
                                 </div>
                             </div>
@@ -1631,6 +1638,12 @@
         let uploadedFile = null;
         const totalSteps = 4;
 
+        // Progressive analysis tracking
+        let tempSessionId = null;
+        let extractionComplete = false;
+        let analysisComplete = false;
+        let researchComplete = false;
+
         // Initialize wizard on page load
         document.addEventListener('DOMContentLoaded', function() {
             initializeWizard();
@@ -1664,10 +1677,27 @@
             });
         }
 
-        function goToStep(step) {
+        async function goToStep(step) {
             // Validate current step before proceeding
             if (step > currentStep && !validateStep(currentStep)) {
                 return;
+            }
+
+            // PROGRESSIVE ANALYSIS: Trigger background tasks at step transitions
+            if (step > currentStep) {
+                if (currentStep === 1 && step === 2) {
+                    // Step 1→2: Upload PDF and start extraction
+                    const success = await startPDFExtraction();
+                    if (!success) return; // Don't proceed if upload failed
+                }
+                else if (currentStep === 2 && step === 3) {
+                    // Step 2→3: Start AI analysis with company context
+                    startAIAnalysis(); // Run in background, don't wait
+                }
+                else if (currentStep === 3 && step === 4) {
+                    // Step 3→4: Start web research if enabled
+                    startWebResearch(); // Run in background, don't wait
+                }
             }
 
             // Hide current step
@@ -1710,6 +1740,163 @@
             const progressPercent = ((step - 1) / (totalSteps - 1)) * 100;
             document.getElementById('progress-line').style.width = progressPercent + '%';
         }
+
+        // ============================================================================
+        // PROGRESSIVE ANALYSIS FUNCTIONS
+        // ============================================================================
+
+        async function startPDFExtraction() {
+            console.log('📄 Step 1→2: Starting PDF extraction...');
+
+            if (!uploadedFile) {
+                alert('Please upload a PDF file first');
+                return false;
+            }
+
+            // Show extraction status
+            const extractionStatus = document.getElementById('extraction-status');
+            const nextBtn = document.getElementById('next-step-1');
+            if (extractionStatus) {
+                extractionStatus.style.display = 'block';
+            }
+            if (nextBtn) {
+                nextBtn.disabled = true;
+                nextBtn.innerHTML = '<i class="fas fa-spinner fa-spin tw-mr-2"></i> Extracting PDF...';
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('report', uploadedFile);
+
+                const response = await fetch('/upload_pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    tempSessionId = data.temp_session_id;
+                    extractionComplete = true;
+                    console.log(`✅ Extraction complete: ${data.char_count} chars, ${data.table_count} tables, ${data.image_count} images`);
+                    console.log(`📝 Temp session ID: ${tempSessionId}`);
+
+                    // Hide extraction status and show success
+                    if (extractionStatus) {
+                        extractionStatus.className = 'alert alert-success tw-mt-3';
+                        extractionStatus.innerHTML = '<i class="fas fa-check-circle tw-mr-2"></i> <strong>PDF extracted successfully!</strong> Proceeding...';
+                        setTimeout(() => {
+                            extractionStatus.style.display = 'none';
+                        }, 1500);
+                    }
+
+                    // Re-enable next button
+                    if (nextBtn) {
+                        nextBtn.disabled = false;
+                        nextBtn.innerHTML = 'Next: Company Details <i class="fas fa-arrow-right tw-ml-2"></i>';
+                    }
+
+                    return true;
+                } else {
+                    throw new Error(data.error || 'PDF extraction failed');
+                }
+            } catch (error) {
+                console.error('❌ Extraction error:', error);
+
+                // Show error status
+                if (extractionStatus) {
+                    extractionStatus.className = 'alert alert-danger tw-mt-3';
+                    extractionStatus.innerHTML = '<i class="fas fa-exclamation-circle tw-mr-2"></i> <strong>Extraction failed:</strong> ' + error.message;
+                }
+
+                // Reset button
+                if (nextBtn) {
+                    nextBtn.disabled = false;
+                    nextBtn.innerHTML = 'Next: Company Details <i class="fas fa-arrow-right tw-ml-2"></i>';
+                }
+
+                alert('Error processing PDF: ' + error.message);
+                return false;
+            }
+        }
+
+        async function startAIAnalysis() {
+            console.log('🔍 Step 2→3: Starting AI analysis in background...');
+
+            if (!tempSessionId) {
+                console.warn('⚠️ No temp session ID, skipping analysis');
+                return;
+            }
+
+            try {
+                const companyName = document.getElementById('company-name').value;
+                const industry = document.getElementById('industry').value;
+                const reportType = document.getElementById('report-type').value;
+
+                const response = await fetch('/analyze_content', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        temp_session_id: tempSessionId,
+                        company_name: companyName,
+                        industry: industry,
+                        report_type: reportType
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    analysisComplete = true;
+                    console.log(`✅ AI analysis complete: ${data.key_details_count} key details extracted`);
+                } else {
+                    console.error('❌ Analysis failed:', data.error);
+                }
+            } catch (error) {
+                console.error('❌ Analysis error:', error);
+            }
+        }
+
+        async function startWebResearch() {
+            console.log('🌐 Step 3→4: Starting web research in background...');
+
+            if (!tempSessionId) {
+                console.warn('⚠️ No temp session ID, skipping research');
+                return;
+            }
+
+            try {
+                const companyName = document.getElementById('company-name').value;
+                const enableResearch = document.getElementById('enable-research').checked;
+
+                const response = await fetch('/research_company', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        temp_session_id: tempSessionId,
+                        company_name: companyName,
+                        enable_web_research: enableResearch
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    researchComplete = true;
+                    console.log(`✅ Web research complete (enabled: ${data.research_enabled})`);
+                } else {
+                    console.error('❌ Research failed:', data.error);
+                }
+            } catch (error) {
+                console.error('❌ Research error:', error);
+            }
+        }
+
+        // ============================================================================
 
         function validateStep(step) {
             if (step === 1) {
@@ -2123,60 +2310,52 @@
             }
             
             async uploadReportAndSetup() {
+                // PROGRESSIVE ANALYSIS VERSION: All analysis already done, just launch panel
+
                 // Validate form
                 if (this.selectedExecutives.length === 0) {
                     alert('Please select at least one executive for the panel.');
                     return;
                 }
-                
-                const fileInput = document.getElementById('report-pdf');
+
                 const companyName = document.getElementById('company-name').value;
                 const industry = document.getElementById('industry').value;
                 const reportType = document.getElementById('report-type').value;
-                const sessionType = document.getElementById('session-type').value;
                 const questionLimit = document.getElementById('question-limit').value;
-                const timeLimit = document.getElementById('time-limit').value;
-                // Version 2: New options
                 const allowFollowups = document.getElementById('allow-followups').checked;
                 const enableResearch = document.getElementById('enable-research').checked;
-                
-                if (!fileInput.files[0] || !companyName || !industry || !reportType) {
-                    alert('Please fill in all required fields and upload a PDF report.');
-                    return;
-                }
-                
-                // Validate PDF file
-                if (!this.validatePDFFile(fileInput.files[0])) {
-                    return;
-                }
-                
-                // Show upload progress
+
+                // Show upload progress (fast now - only 3 seconds!)
                 this.showUploadProgress();
                 
-                try {
-                    // Create FormData for file upload
-                    const formData = new FormData();
-                    formData.append('report', fileInput.files[0]);
-                    formData.append('company_name', companyName);
-                    formData.append('industry', industry);
-                    formData.append('report_type', reportType);
-                    formData.append('question_limit', questionLimit);
-                    // Version 2: New options
-                    formData.append('allow_followups', allowFollowups);
-                    formData.append('enable_web_research', enableResearch);
+                // PROGRESSIVE ANALYSIS: Check if temp session exists
+                if (!tempSessionId) {
+                    alert('Session data not found. Please restart from Step 1.');
+                    return;
+                }
 
-                    // Append selected executives
-                    this.selectedExecutives.forEach(exec => {
-                        formData.append('executives[]', exec);
-                    });
-                    
-                    const response = await fetch('/upload_report', {
+                try {
+                    // Call launch_panel endpoint with all cached data
+                    // All analysis already done progressively, this takes only ~3 seconds
+                    const response = await fetch('/launch_panel', {
                         method: 'POST',
-                        body: formData
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            temp_session_id: tempSessionId,
+                            company_name: companyName,
+                            industry: industry,
+                            report_type: reportType,
+                            executives: this.selectedExecutives,
+                            question_limit: parseInt(questionLimit),
+                            allow_followups: allowFollowups,
+                            enable_web_research: enableResearch
+                        })
                     });
-                    
+
                     const data = await response.json();
-                    
+
                     if (data.status === 'success') {
                         this.hideUploadProgress();
                         this.reportUploaded = true;
@@ -2192,12 +2371,14 @@
 
                         // Show ready screen instead of immediately launching
                         this.showPhase('ready');
+
+                        console.log('🚀 Panel launched successfully (3-second operation!)');
                     } else {
-                        throw new Error(data.error || 'Failed to setup session');
+                        throw new Error(data.error || 'Failed to launch panel');
                     }
                 } catch (error) {
                     this.hideUploadProgress();
-                    alert('Error uploading report: ' + error.message);
+                    alert('Error launching panel: ' + error.message);
                 }
             }
             

@@ -33,6 +33,50 @@ import database as db
 
 CST = pytz.timezone('America/Chicago')
 
+# ============================================================================
+# PROGRESSIVE ANALYSIS CACHE (Option C Implementation)
+# ============================================================================
+# In-memory cache for progressive background analysis
+# Structure: {temp_session_id: {'extraction': ..., 'ai_analysis': ..., 'web_research': ...}}
+ANALYSIS_CACHE = {}
+
+def get_temp_session_id():
+    """Generate a temporary session ID for caching extraction results"""
+    import uuid
+    return f"temp_{uuid.uuid4()}"
+
+def cache_extraction(temp_session_id, extraction_result):
+    """Cache extraction results for later use"""
+    if temp_session_id not in ANALYSIS_CACHE:
+        ANALYSIS_CACHE[temp_session_id] = {}
+    ANALYSIS_CACHE[temp_session_id]['extraction'] = extraction_result
+    print(f"💾 Cached extraction for {temp_session_id}")
+
+def cache_ai_analysis(temp_session_id, key_details):
+    """Cache AI analysis results"""
+    if temp_session_id not in ANALYSIS_CACHE:
+        ANALYSIS_CACHE[temp_session_id] = {}
+    ANALYSIS_CACHE[temp_session_id]['ai_analysis'] = key_details
+    print(f"💾 Cached AI analysis for {temp_session_id}")
+
+def cache_web_research(temp_session_id, company_research):
+    """Cache web research results"""
+    if temp_session_id not in ANALYSIS_CACHE:
+        ANALYSIS_CACHE[temp_session_id] = {}
+    ANALYSIS_CACHE[temp_session_id]['web_research'] = company_research
+    print(f"💾 Cached web research for {temp_session_id}")
+
+def get_cached_data(temp_session_id):
+    """Retrieve all cached data for a temp session"""
+    return ANALYSIS_CACHE.get(temp_session_id, {})
+
+def clear_cache(temp_session_id):
+    """Clear cached data after session is created"""
+    if temp_session_id in ANALYSIS_CACHE:
+        del ANALYSIS_CACHE[temp_session_id]
+        print(f"🗑️ Cleared cache for {temp_session_id}")
+# ============================================================================
+
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
@@ -928,10 +972,274 @@ def index():
     # Don't clear session data - it's persistent in DB now
     return render_template('index.html', ai_available=openai_available)
 
+# ============================================================================
+# PROGRESSIVE ANALYSIS ENDPOINTS (Option C)
+# ============================================================================
+
+@app.route('/upload_pdf', methods=['POST'])
+def upload_pdf():
+    """
+    Step 1: Handle PDF upload and start extraction immediately
+    Returns temp_session_id for tracking through wizard
+    """
+    try:
+        if 'report' not in request.files:
+            return jsonify({'status': 'error', 'error': 'No file uploaded'})
+
+        file = request.files['report']
+        if file.filename == '':
+            return jsonify({'status': 'error', 'error': 'No file selected'})
+
+        if not file.filename.lower().endswith('.pdf'):
+            return jsonify({'status': 'error', 'error': 'Please upload a PDF file'})
+
+        print(f"📄 Starting PDF extraction...")
+
+        # Generate temp session ID
+        temp_session_id = get_temp_session_id()
+
+        # Save PDF temporarily
+        filename = secure_filename(file.filename)
+        temp_pdf_path = os.path.join(UPLOAD_FOLDER, f"{temp_session_id}_{filename}")
+        file.save(temp_pdf_path)
+
+        try:
+            # Extract comprehensive content from PDF (text, tables, embedded images)
+            # This is the slowest part (~60 seconds for large reports)
+            file.seek(0)  # Reset file pointer
+            extraction_result = comprehensive_pdf_extraction(file, analyze_images_flag=True)
+
+            if not extraction_result or not extraction_result['combined_content']:
+                return jsonify({'status': 'error', 'error': 'Could not extract content from PDF'})
+
+            report_text = extraction_result['combined_content']
+
+            print(f"✅ Extraction complete: {len(report_text)} characters")
+            print(f"   📊 Tables: {len(extraction_result['tables'])}, 🖼️ Images: {len(extraction_result['images'])}")
+
+            # Cache extraction results
+            cache_extraction(temp_session_id, {
+                'combined_content': report_text,
+                'tables': extraction_result['tables'],
+                'images': extraction_result['images'],
+                'image_descriptions': extraction_result['image_descriptions']
+            })
+
+            return jsonify({
+                'status': 'success',
+                'temp_session_id': temp_session_id,
+                'extraction_complete': True,
+                'char_count': len(report_text),
+                'table_count': len(extraction_result['tables']),
+                'image_count': len(extraction_result['images'])
+            })
+
+        finally:
+            # Clean up temp PDF file
+            if os.path.exists(temp_pdf_path):
+                os.remove(temp_pdf_path)
+
+    except Exception as e:
+        print(f"Upload error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': f'Error processing file: {str(e)}'})
+
+
+@app.route('/analyze_content', methods=['POST'])
+def analyze_content():
+    """
+    Step 2: Perform AI analysis with company context
+    Uses cached extraction from Step 1
+    """
+    try:
+        data = request.get_json()
+        temp_session_id = data.get('temp_session_id')
+        company_name = data.get('company_name', 'Your Company')
+        industry = data.get('industry', 'Technology')
+        report_type = data.get('report_type', 'Business Plan')
+
+        if not temp_session_id:
+            return jsonify({'status': 'error', 'error': 'Missing temp_session_id'})
+
+        # Get cached extraction
+        cached_data = get_cached_data(temp_session_id)
+        if 'extraction' not in cached_data:
+            return jsonify({'status': 'error', 'error': 'Extraction data not found. Please re-upload PDF.'})
+
+        extraction = cached_data['extraction']
+        report_text = extraction['combined_content']
+
+        print(f"🔍 Analyzing document for {company_name}...")
+
+        # Analyze document to extract key strategic details
+        key_details = analyze_document_with_ai(
+            report_text, None, company_name, industry, report_type
+        )
+
+        # Cache AI analysis
+        cache_ai_analysis(temp_session_id, key_details)
+
+        return jsonify({
+            'status': 'success',
+            'analysis_complete': True,
+            'key_details_count': len(key_details)
+        })
+
+    except Exception as e:
+        print(f"Analysis error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': f'Error analyzing content: {str(e)}'})
+
+
+@app.route('/research_company', methods=['POST'])
+def research_company_endpoint():
+    """
+    Step 3: Optional web research for company background
+    Uses cached data from previous steps
+    """
+    try:
+        data = request.get_json()
+        temp_session_id = data.get('temp_session_id')
+        company_name = data.get('company_name')
+        enable_web_research = data.get('enable_web_research', False)
+
+        if not temp_session_id:
+            return jsonify({'status': 'error', 'error': 'Missing temp_session_id'})
+
+        company_research = None
+        if enable_web_research and company_name:
+            print(f"🌐 Researching {company_name} online...")
+            company_research = research_company_online(company_name)
+            cache_web_research(temp_session_id, company_research)
+
+        return jsonify({
+            'status': 'success',
+            'research_complete': True,
+            'research_enabled': company_research is not None
+        })
+
+    except Exception as e:
+        print(f"Research error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': f'Error researching company: {str(e)}'})
+
+
+@app.route('/launch_panel', methods=['POST'])
+def launch_panel():
+    """
+    Step 4: Launch panel session with first question
+    Uses all cached data from previous steps (3-second final operation)
+    """
+    try:
+        data = request.get_json()
+        temp_session_id = data.get('temp_session_id')
+        company_name = data.get('company_name', 'Your Company')
+        industry = data.get('industry', 'Technology')
+        report_type = data.get('report_type', 'Business Plan')
+        selected_executives = data.get('executives', [])
+        question_limit = int(data.get('question_limit', 10))
+        allow_followups = data.get('allow_followups', False)
+        enable_web_research = data.get('enable_web_research', False)
+
+        if not temp_session_id:
+            return jsonify({'status': 'error', 'error': 'Missing temp_session_id'})
+
+        if not selected_executives:
+            return jsonify({'status': 'error', 'error': 'Please select at least one executive'})
+
+        # Get all cached data
+        cached_data = get_cached_data(temp_session_id)
+        if 'extraction' not in cached_data or 'ai_analysis' not in cached_data:
+            return jsonify({'status': 'error', 'error': 'Required analysis data not found. Please restart wizard.'})
+
+        extraction = cached_data['extraction']
+        key_details = cached_data['ai_analysis']
+        company_research = cached_data.get('web_research', None)
+
+        full_content = extraction['combined_content']
+
+        print(f"🚀 Launching panel session for {company_name}...")
+        print(f"   Using cached extraction ({len(full_content)} chars) and analysis ({len(key_details)} details)")
+
+        # Generate first question (fast - only ~3 seconds)
+        first_executive = selected_executives[0]
+        first_question, first_topic = generate_ai_questions_with_topic_diversity(
+            full_content, first_executive, company_name, industry, report_type,
+            key_details, [], 1, company_research,
+            conversation_history=[]  # First question, no history yet
+        )
+
+        # Generate TTS for first question
+        exec_name = get_executive_name(first_executive)
+        first_tts_url = generate_tts_audio(first_question, exec_name)
+
+        # Create session in database
+        sid = get_session_id()
+        db.create_session(
+            session_id=sid,
+            company_name=company_name,
+            industry=industry,
+            report_type=report_type,
+            selected_executives=selected_executives,
+            report_content=full_content,
+            key_details=key_details,
+            question_limit=question_limit,
+            allow_followups=allow_followups,
+            enable_web_research=enable_web_research,
+            company_research=company_research
+        )
+
+        # Add first question to database
+        db.add_question(
+            session_id=sid,
+            executive=first_executive,
+            executive_name=exec_name,
+            question_text=first_question,
+            is_followup=False
+        )
+
+        # Update session with first topic used
+        db.update_session(sid, used_topics=[first_topic], current_question_count=1)
+
+        # Clear cache now that session is created
+        clear_cache(temp_session_id)
+
+        print(f"🎯 {first_executive} asking first question")
+        print(f"💾 Session {sid} created in database")
+
+        return jsonify({
+            'status': 'success',
+            'first_question': {
+                'executive': first_executive,
+                'name': exec_name,
+                'title': first_executive,
+                'question': first_question,
+                'timestamp': datetime.now(CST).isoformat(),
+                'tts_url': first_tts_url,
+                'image': get_executive_image(first_executive)
+            },
+            'ai_mode': 'enabled' if openai_available else 'demo',
+            'research_enabled': enable_web_research and company_research is not None
+        })
+
+    except Exception as e:
+        print(f"Launch error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': f'Error launching panel: {str(e)}'})
+
+# ============================================================================
+# LEGACY ENDPOINT (Keep for backward compatibility)
+# ============================================================================
+
 @app.route('/upload_report', methods=['POST'])
 def upload_report():
     """
-    Handle PDF upload and analysis
+    LEGACY: Handle PDF upload and analysis in one step
+    Kept for backward compatibility with old frontend
     Now with Vision API support and optional web research
     """
     try:
