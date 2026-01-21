@@ -992,12 +992,13 @@ def upload_pdf():
 
         print(f"📄 Starting PDF extraction...")
 
-        # Generate temp session ID (stored in Flask session)
-        temp_session_id = get_temp_session_id()
+        # Generate unique temp filename for PDF
+        import uuid
+        temp_id = str(uuid.uuid4())[:8]
 
         # Save PDF temporarily
         filename = secure_filename(file.filename)
-        temp_pdf_path = os.path.join(UPLOAD_FOLDER, f"{temp_session_id}_{filename}")
+        temp_pdf_path = os.path.join(UPLOAD_FOLDER, f"temp_{temp_id}_{filename}")
         file.save(temp_pdf_path)
 
         try:
