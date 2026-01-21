@@ -610,7 +610,16 @@ Document:
 
         result = json.loads(response.choices[0].message.content)
         key_details = result.get('key_details', [])
-        print(f"📊 Extracted {len(key_details)} strategic recommendations and analyses for executive questioning")
+
+        print(f"\n{'='*80}")
+        print(f"📊 DOCUMENT ANALYSIS RESULTS ({len(key_details)} items extracted)")
+        print(f"{'='*80}")
+        for i, detail in enumerate(key_details[:15], 1):
+            # Truncate very long details for readability
+            display_detail = detail if len(detail) <= 150 else detail[:147] + "..."
+            print(f"{i:2}. {display_detail}")
+        print(f"{'='*80}\n")
+
         return key_details[:15]
 
     except Exception as e:
@@ -669,7 +678,21 @@ Provide factual, verifiable information. If you don't have current information, 
         )
 
         research_summary = response.choices[0].message.content
-        print(f"✅ Research complete: {len(research_summary)} characters")
+
+        print(f"\n{'='*80}")
+        print(f"🌐 WEB RESEARCH RESULTS for {company_name}")
+        print(f"{'='*80}")
+        # Print first 800 characters with word boundary
+        if len(research_summary) > 800:
+            truncated = research_summary[:800]
+            last_space = truncated.rfind(' ')
+            if last_space > 600:
+                truncated = truncated[:last_space]
+            print(f"{truncated}...")
+            print(f"\n[... {len(research_summary) - len(truncated)} more characters]")
+        else:
+            print(research_summary)
+        print(f"{'='*80}\n")
 
         return {
             'company_name': company_name,
@@ -726,6 +749,13 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
 
     selected_topic = random.choice(unused_topics)
     topic_index = all_key_details.index(selected_topic)
+
+    # Log which topic is being used for this question
+    topic_display = selected_topic if len(selected_topic) <= 120 else selected_topic[:117] + "..."
+    print(f"\n{'─'*80}")
+    print(f"❓ Question #{question_number} for {executive}")
+    print(f"   Selected topic: {topic_display}")
+    print(f"{'─'*80}")
 
     try:
         role_focus = {
@@ -849,7 +879,12 @@ Return ONLY the question text, no preamble or explanation."""
         )
 
         question = response.choices[0].message.content.strip()
-        print(f"🎯 {executive} Q#{question_number} on topic: {selected_topic[:50]}...")
+
+        # Log the generated question
+        question_display = question if len(question) <= 150 else question[:147] + "..."
+        print(f"   ✅ Generated: {question_display}")
+        print(f"{'─'*80}\n")
+
         return question, topic_index
 
     except Exception as e:
