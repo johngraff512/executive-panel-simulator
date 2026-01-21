@@ -701,6 +701,29 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
         unused_topics = all_key_details
         used_topics.clear()
 
+    # Filter out topics that are too similar to recent conversation
+    # Extract numbers from previous questions to avoid repetition
+    if conversation_history and len(conversation_history) > 0:
+        import re
+        recent_numbers = set()
+        for qa in conversation_history[-3:]:  # Check last 3 Q&As
+            # Extract dollar amounts and percentages
+            numbers = re.findall(r'\$[\d,]+\.?\d*[MBK]?|\d+%', qa['question'])
+            recent_numbers.update(numbers)
+
+        # Prefer topics that don't contain the same numbers
+        filtered_topics = []
+        for topic in unused_topics:
+            topic_numbers = set(re.findall(r'\$[\d,]+\.?\d*[MBK]?|\d+%', topic))
+            # If this topic doesn't share numbers with recent questions, it's preferred
+            if not topic_numbers.intersection(recent_numbers):
+                filtered_topics.append(topic)
+
+        # Use filtered topics if we found any, otherwise use all unused topics
+        if filtered_topics:
+            print(f"🎯 Topic diversity: {len(filtered_topics)}/{len(unused_topics)} topics avoid number repetition")
+            unused_topics = filtered_topics
+
     selected_topic = random.choice(unused_topics)
     topic_index = all_key_details.index(selected_topic)
 
@@ -720,27 +743,59 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
         if company_research:
             research_context = f"\nRecent company research: {company_research.get('summary', '')[:300]}"
 
-        # Format conversation history for context
+        # Format conversation history for context with explicit repetition detection
         conversation_context = ""
+        avoid_keywords = set()  # Track specific numbers/terms to avoid
+
         if conversation_history and len(conversation_history) > 0:
             conversation_context = "\n\nPREVIOUS CONVERSATION:\n"
             for i, qa in enumerate(conversation_history[-5:], 1):  # Last 5 Q&As
                 conversation_context += f"\nQ{i} ({qa['executive']}): {qa['question']}\n"
                 conversation_context += f"A{i}: {qa['response'][:200]}{'...' if len(qa['response']) > 200 else ''}\n"
 
+                # Extract specific numbers and key terms from previous questions
+                import re
+                # Find dollar amounts like $532M, $455.5M
+                dollar_amounts = re.findall(r'\$[\d,]+\.?\d*[MBK]?', qa['question'])
+                avoid_keywords.update(dollar_amounts)
+
+                # Find percentage values like 40%, 30%
+                percentages = re.findall(r'\d+%', qa['question'])
+                avoid_keywords.update(percentages)
+
+                # Extract key phrases (2-4 word sequences)
+                words = qa['question'].lower().split()
+                for j in range(len(words) - 1):
+                    if len(words[j]) > 3 and len(words[j+1]) > 3:  # Skip short words
+                        avoid_keywords.add(f"{words[j]} {words[j+1]}")
+
             # Extract topics already covered
             covered_topics = set()
             for qa in conversation_history:
-                # Simple keyword extraction from questions
-                if 'market' in qa['question'].lower():
-                    covered_topics.add('market analysis')
-                if 'financial' in qa['question'].lower() or 'revenue' in qa['question'].lower():
+                # Enhanced keyword extraction from questions
+                q_lower = qa['question'].lower()
+                if 'market' in q_lower or 'customer' in q_lower:
+                    covered_topics.add('market/customer analysis')
+                if 'financial' in q_lower or 'revenue' in q_lower or 'profit' in q_lower or 'investment' in q_lower:
                     covered_topics.add('financial projections')
-                if 'customer' in qa['question'].lower():
-                    covered_topics.add('customer acquisition')
+                if 'technology' in q_lower or 'technical' in q_lower or 'system' in q_lower:
+                    covered_topics.add('technical implementation')
+                if 'competitive' in q_lower or 'competitor' in q_lower:
+                    covered_topics.add('competitive strategy')
+                if 'operational' in q_lower or 'execution' in q_lower or 'implement' in q_lower:
+                    covered_topics.add('operational execution')
+                if 'risk' in q_lower or 'contingency' in q_lower:
+                    covered_topics.add('risk management')
 
             if covered_topics:
-                conversation_context += f"\nTopics already discussed: {', '.join(covered_topics)}\n"
+                conversation_context += f"\n⚠️ Topics already discussed: {', '.join(covered_topics)}\n"
+                conversation_context += "DO NOT ask about these topics again. Find a completely different aspect.\n"
+
+            if avoid_keywords:
+                # Show specific numbers/phrases to avoid
+                sample_keywords = list(avoid_keywords)[:8]  # Show first 8 examples
+                conversation_context += f"\n⚠️ Avoid repeating these specific numbers/terms: {', '.join(sample_keywords)}\n"
+                conversation_context += "Find a DIFFERENT strategic recommendation or analysis that hasn't been discussed.\n"
 
         prompt = f"""You are the {executive} of a company evaluating this {report_type} from {company_name} in the {industry} industry.
 
@@ -752,7 +807,10 @@ Your role focuses on: {focus}{research_context}{conversation_context}
 Generate ONE tough, probing question that CHALLENGES or CLARIFIES this specific recommendation/analysis. Your question should:
 
 1. DIRECTLY REFERENCE what they proposed or analyzed (use specifics from the topic above)
-2. NOT repeat topics already covered in previous questions (if any are listed above)
+2. CRITICAL: If previous questions are listed above, DO NOT repeat the same topics, numbers, or themes
+   - Avoid using the same dollar amounts, percentages, or initiatives mentioned in previous questions
+   - If financial projections were already discussed, focus on a different aspect (operations, tech, market, etc.)
+   - Ask about a completely different strategic recommendation or analysis
 3. Build on or reference the presenter's previous responses when relevant
 4. Challenge one of these aspects:
    - The underlying assumptions or logic
