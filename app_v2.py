@@ -1139,14 +1139,27 @@ def launch_panel():
 
         # Get all cached data from Flask session
         cached_data = get_cached_data()
-        if 'extraction' not in cached_data or 'ai_analysis' not in cached_data:
-            # Debug logging
-            print(f"❌ Cache check failed!")
+
+        # Check for extraction (required - can't proceed without it)
+        if 'extraction' not in cached_data:
+            print(f"❌ No extraction found in cache!")
             print(f"   Cache keys present: {list(cached_data.keys())}")
-            return jsonify({'status': 'error', 'error': 'Required analysis data not found. Please restart wizard.'})
+            return jsonify({'status': 'error', 'error': 'Extraction data not found. Please restart wizard.'})
 
         extraction = cached_data['extraction']
-        key_details = cached_data['ai_analysis']
+
+        # If AI analysis is missing, run it now (handles race condition)
+        if 'ai_analysis' not in cached_data:
+            print(f"⚠️ AI analysis not in cache yet - running now...")
+            report_text = extraction['combined_content']
+            key_details = analyze_document_with_ai(
+                report_text, None, company_name, industry, report_type
+            )
+            cache_ai_analysis(key_details)
+            print(f"✅ AI analysis completed on-demand: {len(key_details)} details")
+        else:
+            key_details = cached_data['ai_analysis']
+
         company_research = cached_data.get('web_research', None)
 
         full_content = extraction['combined_content']
