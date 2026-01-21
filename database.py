@@ -77,6 +77,18 @@ def init_database():
             )
         ''')
 
+        # Progressive cache table (for multi-worker progressive analysis)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS progressive_cache (
+                flask_session_id TEXT PRIMARY KEY,
+                extraction_data TEXT,  -- JSON with combined_content, tables, images, image_descriptions
+                ai_analysis_data TEXT,  -- JSON array of key details
+                web_research_data TEXT,  -- JSON with company research
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP  -- Auto-cleanup after 1 hour
+            )
+        ''')
+
         # Create indices for faster queries
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_questions_session ON questions(session_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_responses_session ON responses(session_id)')
@@ -298,6 +310,115 @@ def get_session_stats():
             'total_questions': total_questions,
             'total_responses': total_responses
         }
+
+# ============================================================================
+# PROGRESSIVE CACHE FUNCTIONS (Database-backed for multi-worker support)
+# ============================================================================
+
+def save_progressive_cache_extraction(flask_session_id, extraction_data):
+    """Save extraction data to database for progressive analysis"""
+    from datetime import timedelta
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Set expiration to 1 hour from now
+        expires_at = datetime.now() + timedelta(hours=1)
+
+        cursor.execute('''
+            INSERT OR REPLACE INTO progressive_cache
+            (flask_session_id, extraction_data, expires_at, created_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (flask_session_id, json.dumps(extraction_data), expires_at.isoformat()))
+
+        print(f"💾 Saved extraction to database cache for session {flask_session_id[:20]}...")
+
+def save_progressive_cache_analysis(flask_session_id, analysis_data):
+    """Save AI analysis data to database for progressive analysis"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            UPDATE progressive_cache
+            SET ai_analysis_data = ?
+            WHERE flask_session_id = ?
+        ''', (json.dumps(analysis_data), flask_session_id))
+
+        print(f"💾 Saved AI analysis to database cache for session {flask_session_id[:20]}...")
+
+def save_progressive_cache_research(flask_session_id, research_data):
+    """Save web research data to database for progressive analysis"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            UPDATE progressive_cache
+            SET web_research_data = ?
+            WHERE flask_session_id = ?
+        ''', (json.dumps(research_data), flask_session_id))
+
+        print(f"💾 Saved web research to database cache for session {flask_session_id[:20]}...")
+
+def get_progressive_cache(flask_session_id):
+    """Retrieve progressive cache data from database"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT extraction_data, ai_analysis_data, web_research_data
+            FROM progressive_cache
+            WHERE flask_session_id = ?
+            AND (expires_at IS NULL OR expires_at > datetime('now'))
+        ''', (flask_session_id,))
+
+        row = cursor.fetchone()
+
+        if not row:
+            print(f"❌ No cache found for session {flask_session_id[:20]}...")
+            return {}
+
+        cache = {}
+
+        if row['extraction_data']:
+            cache['extraction'] = json.loads(row['extraction_data'])
+
+        if row['ai_analysis_data']:
+            cache['ai_analysis'] = json.loads(row['ai_analysis_data'])
+
+        if row['web_research_data']:
+            cache['web_research'] = json.loads(row['web_research_data'])
+
+        print(f"✅ Retrieved cache from database: {list(cache.keys())}")
+        return cache
+
+def delete_progressive_cache(flask_session_id):
+    """Delete progressive cache data after session is created"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            DELETE FROM progressive_cache
+            WHERE flask_session_id = ?
+        ''', (flask_session_id,))
+
+        print(f"🗑️ Deleted progressive cache for session {flask_session_id[:20]}...")
+
+def cleanup_expired_progressive_cache():
+    """Clean up expired progressive cache entries"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            DELETE FROM progressive_cache
+            WHERE expires_at < datetime('now')
+        ''')
+
+        deleted = cursor.rowcount
+        if deleted > 0:
+            print(f"🗑️ Cleaned up {deleted} expired progressive cache entries")
+        return deleted
+
+# ============================================================================
 
 # Initialize database when module is imported
 if __name__ != '__main__':

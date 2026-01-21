@@ -36,51 +36,42 @@ CST = pytz.timezone('America/Chicago')
 # ============================================================================
 # PROGRESSIVE ANALYSIS CACHE (Option C Implementation)
 # ============================================================================
-# Use Flask session for progressive background analysis cache
-# Flask sessions persist across Gunicorn workers via cookies
-# Structure: session['progressive_cache'] = {'extraction': ..., 'ai_analysis': ..., 'web_research': ...}
+# Use database-backed cache for progressive background analysis
+# Database storage persists across Gunicorn workers (unlike in-memory or cookies)
+# Flask session ID is used as the cache key (only small session ID stored in cookie)
 
-def get_temp_session_id():
-    """Generate a temporary session ID for caching extraction results"""
-    if 'temp_session_id' not in session:
-        import uuid
-        session['temp_session_id'] = f"temp_{uuid.uuid4()}"
-    return session['temp_session_id']
+def get_flask_session_id():
+    """Get Flask session ID for cache key (creates session if needed)"""
+    # Access session to ensure it's created
+    if 'initialized' not in session:
+        session['initialized'] = True
+    # The session ID is automatically managed by Flask
+    return session.sid
 
 def cache_extraction(extraction_result):
-    """Cache extraction results in Flask session"""
-    if 'progressive_cache' not in session:
-        session['progressive_cache'] = {}
-    session['progressive_cache']['extraction'] = extraction_result
-    session.modified = True  # Force session update
-    print(f"💾 Cached extraction in session")
+    """Cache extraction results in database"""
+    flask_sid = get_flask_session_id()
+    db.save_progressive_cache_extraction(flask_sid, extraction_result)
 
 def cache_ai_analysis(key_details):
-    """Cache AI analysis results in Flask session"""
-    if 'progressive_cache' not in session:
-        session['progressive_cache'] = {}
-    session['progressive_cache']['ai_analysis'] = key_details
-    session.modified = True
-    print(f"💾 Cached AI analysis in session")
+    """Cache AI analysis results in database"""
+    flask_sid = get_flask_session_id()
+    db.save_progressive_cache_analysis(flask_sid, key_details)
 
 def cache_web_research(company_research):
-    """Cache web research results in Flask session"""
-    if 'progressive_cache' not in session:
-        session['progressive_cache'] = {}
-    session['progressive_cache']['web_research'] = company_research
-    session.modified = True
-    print(f"💾 Cached web research in session")
+    """Cache web research results in database"""
+    flask_sid = get_flask_session_id()
+    db.save_progressive_cache_research(flask_sid, company_research)
 
 def get_cached_data():
-    """Retrieve all cached data from Flask session"""
-    return session.get('progressive_cache', {})
+    """Retrieve all cached data from database"""
+    flask_sid = get_flask_session_id()
+    return db.get_progressive_cache(flask_sid)
 
 def clear_cache():
     """Clear cached data after session is created"""
-    if 'progressive_cache' in session:
-        del session['progressive_cache']
-        session.modified = True
-        print(f"🗑️ Cleared progressive cache from session")
+    flask_sid = get_flask_session_id()
+    db.delete_progressive_cache(flask_sid)
 # ============================================================================
 
 # Initialize Flask app
