@@ -2,7 +2,20 @@ Flask==2.3.3
 gunicorn==21.2.0
 python-dotenv==1.0.0
 PyPDF2==3.0.1
+PyMuPDF>=1.23.0
+pdfplumber>=0.10.0
+pdf2image>=1.16.0
+Pillow>=10.0.0
 werkzeug==2.3.7
 openai>=1.0.0,<2.0.0
 reportlab
 pytz
+# Version 2 dependencies
+pdf2image==1.16.3
+Pillow>=10.3.0
+beautifulsoup4==4.12.2
+requests==2.31.0
+lxml>=5.0.0
+# Enhanced PDF parsing dependencies
+PyMuPDF>=1.23.0
+pdfplumber>=0.10.0
