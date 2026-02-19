@@ -1275,6 +1275,13 @@
                                             <small class="tw-block text-muted">AI will research your company online for more informed questions (best for real companies)</small>
                                         </label>
                                     </div>
+                                    <div class="form-check form-switch tw-mt-3">
+                                        <input class="form-check-input" type="checkbox" id="enable-ai-feedback" name="enable-ai-feedback" value="true">
+                                        <label class="form-check-label" for="enable-ai-feedback">
+                                            <strong>Enable AI Feedback</strong>
+                                            <small class="tw-block text-muted">Receive personalized feedback on your performance after the session ends</small>
+                                        </label>
+                                    </div>
                                 </div>
 
                                 <div class="tw-flex tw-justify-between tw-mt-6">
@@ -1337,6 +1344,8 @@
                                                 <dd class="col-sm-7 tw-text-sm" id="review-followups">-</dd>
                                                 <dt class="col-sm-5 tw-text-sm">Web Research:</dt>
                                                 <dd class="col-sm-7 tw-text-sm" id="review-research">-</dd>
+                                                <dt class="col-sm-5 tw-text-sm">AI Feedback:</dt>
+                                                <dd class="col-sm-7 tw-text-sm" id="review-ai-feedback">-</dd>
                                             </dl>
                                         </div>
                                     </div>
@@ -1557,14 +1566,8 @@
                 </div>
 
                 <div class="tw-mt-6">
-                    <div class="summary-card" style="border-left: 4px solid #28a745;">
-                        <h5>
-                            <i class="fas fa-trophy"></i>
-                            Excellent Work!
-                        </h5>
-                        <p class="tw-mb-0" style="color: #495057; line-height: 1.6;">
-                            You successfully presented to the executive panel and responded to their strategic questions. This type of practice will help you prepare for real-world executive presentations and strategic discussions.
-                        </p>
+                    <div id="ai-feedback-section">
+                        <!-- Populated dynamically: AI feedback cards or fallback "Excellent Work" card -->
                     </div>
 
                     <div class="summary-card" style="border-left: 4px solid var(--texas-orange);">
@@ -1918,7 +1921,7 @@
                 element?.addEventListener('change', populateReview);
             });
 
-            ['allow-followups', 'enable-research'].forEach(id => {
+            ['allow-followups', 'enable-research', 'enable-ai-feedback'].forEach(id => {
                 const element = document.getElementById(id);
                 element?.addEventListener('change', populateReview);
             });
@@ -1951,6 +1954,8 @@
                 document.getElementById('allow-followups')?.checked ? 'Enabled' : 'Disabled';
             document.getElementById('review-research').textContent =
                 document.getElementById('enable-research')?.checked ? 'Enabled' : 'Disabled';
+            document.getElementById('review-ai-feedback').textContent =
+                document.getElementById('enable-ai-feedback')?.checked ? 'Enabled' : 'Disabled';
 
             // Executive panel
             const reviewExecs = document.getElementById('review-executives');
@@ -2139,6 +2144,7 @@
                 // Version 2: New options
                 const allowFollowups = document.getElementById('allow-followups').checked;
                 const enableResearch = document.getElementById('enable-research').checked;
+                const enableAiFeedback = document.getElementById('enable-ai-feedback').checked;
                 
                 if (!fileInput.files[0] || !companyName || !industry || !reportType) {
                     alert('Please fill in all required fields and upload a PDF report.');
@@ -2164,6 +2170,7 @@
                     // Version 2: New options
                     formData.append('allow_followups', allowFollowups);
                     formData.append('enable_web_research', enableResearch);
+                    formData.append('enable_ai_feedback', enableAiFeedback);
 
                     // Append selected executives
                     this.selectedExecutives.forEach(exec => {
@@ -2575,9 +2582,57 @@
                         </div>
                     </div>
                 `;
+
+                // Populate AI feedback section
+                const feedbackSection = document.getElementById('ai-feedback-section');
+                if (summary.ai_feedback && summary.ai_feedback.strengths && summary.ai_feedback.improvements) {
+                    const strengthsHtml = summary.ai_feedback.strengths.map(item => `
+                        <div class="tw-mb-3">
+                            <strong style="color: #28a745;">${item.title}</strong>
+                            <p class="tw-mb-0 tw-mt-1" style="color: #495057; line-height: 1.6;">${item.detail}</p>
+                        </div>
+                    `).join('');
+
+                    const improvementsHtml = summary.ai_feedback.improvements.map(item => `
+                        <div class="tw-mb-3">
+                            <strong style="color: var(--texas-orange);">${item.title}</strong>
+                            <p class="tw-mb-0 tw-mt-1" style="color: #495057; line-height: 1.6;">${item.detail}</p>
+                        </div>
+                    `).join('');
+
+                    feedbackSection.innerHTML = `
+                        <div class="summary-card" style="border-left: 4px solid #28a745;">
+                            <h5>
+                                <i class="fas fa-star tw-mr-2"></i>
+                                What You Did Well
+                            </h5>
+                            ${strengthsHtml}
+                        </div>
+                        <div class="summary-card" style="border-left: 4px solid var(--texas-orange);">
+                            <h5>
+                                <i class="fas fa-lightbulb tw-mr-2"></i>
+                                Areas for Improvement
+                            </h5>
+                            ${improvementsHtml}
+                        </div>
+                    `;
+                } else {
+                    feedbackSection.innerHTML = `
+                        <div class="summary-card" style="border-left: 4px solid #28a745;">
+                            <h5>
+                                <i class="fas fa-trophy"></i>
+                                Excellent Work!
+                            </h5>
+                            <p class="tw-mb-0" style="color: #495057; line-height: 1.6;">
+                                You successfully presented to the executive panel and responded to their strategic questions. This type of practice will help you prepare for real-world executive presentations and strategic discussions.
+                            </p>
+                        </div>
+                    `;
+                }
+
                 this.showPhase('summary');
             }
-            
+
             sameCompanyNewSession() {
                 // Keep company data and file, just reset executive selection
                 this.selectedExecutives = [];

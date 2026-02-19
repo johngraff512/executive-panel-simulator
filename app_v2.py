@@ -856,6 +856,97 @@ def generate_closing_message(company_name, report_type):
     ]
     return random.choice(messages)
 
+def generate_session_feedback(session_data, questions, responses):
+    """Generate AI feedback on the student's performance during the executive panel session.
+
+    Returns a dict with 'strengths' and 'improvements' arrays, or None on failure.
+    """
+    if not openai_available or not openai_client:
+        return None
+
+    try:
+        # Build the full conversation transcript for analysis
+        conversation_text = ""
+        for i, (q, r) in enumerate(zip(questions, responses), 1):
+            followup_marker = " [Follow-up]" if q.get('is_followup') else ""
+            conversation_text += f"\nQ{i} ({q['executive_name']}, {q['executive']}){followup_marker}: {q['question_text']}\n"
+            response_marker = " [Audio Response]" if r['response_type'] == 'audio' else ""
+            conversation_text += f"A{i}{response_marker}: {r['response_text']}\n"
+
+        # Scale feedback count based on conversation length
+        num_questions = len(questions)
+        if num_questions <= 4:
+            feedback_count = "1-2"
+        elif num_questions <= 7:
+            feedback_count = "2-3"
+        else:
+            feedback_count = "3"
+
+        executives_list = ', '.join(session_data.get('selected_executives', []))
+
+        prompt = f"""You are an expert executive communication coach at a top business school. A student just completed a simulated executive panel session where they presented a {session_data['report_type']} for {session_data['company_name']} in the {session_data['industry']} industry.
+
+The student faced questions from these executives: {executives_list}
+
+Here is the complete conversation:
+{conversation_text}
+
+Provide feedback in exactly this JSON format:
+{{
+    "strengths": [
+        {{"title": "Short descriptive label (3-5 words)", "detail": "2-3 sentences referencing a specific moment or response from the conversation. Be encouraging but genuine."}},
+        ...
+    ],
+    "improvements": [
+        {{"title": "Short descriptive label (3-5 words)", "detail": "2-3 sentences referencing a specific moment where the student could have done better, and explaining HOW to improve. Be constructive and specific."}},
+        ...
+    ]
+}}
+
+Requirements:
+- Provide {feedback_count} strengths and {feedback_count} improvements
+- Each item MUST reference SPECIFIC questions and responses from the conversation, not generic advice
+- For strengths: look for moments where the student gave data-driven answers, addressed executive concerns directly, showed strategic thinking, connected ideas across functional areas, or handled difficult questions confidently
+- For improvements: look for moments where the student was vague, avoided the question, lacked supporting data, made unsupported claims, or could have connected their answer to broader strategic implications
+- Titles should be concise labels like "Data-Driven Responses" or "Address Financial Specifics"
+- Keep language professional but warm, as if you are a mentor
+- Do NOT give generic praise like "good job answering questions" — be specific
+
+Return ONLY valid JSON, no other text."""
+
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert executive communication coach providing specific, actionable feedback on student performance during a simulated executive panel. You must return only valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.7,
+            max_tokens=1000
+        )
+
+        result = json.loads(response.choices[0].message.content)
+
+        # Validate expected structure
+        if not isinstance(result.get('strengths'), list) or not isinstance(result.get('improvements'), list):
+            print("Warning: AI feedback missing expected arrays")
+            return None
+
+        # Validate each item has title and detail
+        for item in result['strengths'] + result['improvements']:
+            if 'title' not in item or 'detail' not in item:
+                print("Warning: AI feedback item missing title or detail")
+                return None
+
+        print(f"✅ AI feedback generated: {len(result['strengths'])} strengths, {len(result['improvements'])} improvements")
+        return result
+
+    except Exception as e:
+        print(f"AI feedback generation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 # ========== TTS and Audio ==========
 def generate_tts_audio(text, executive_name):
     """Generate TTS audio and return as base64 data URL"""
@@ -953,12 +1044,13 @@ def upload_report():
         question_limit = int(request.form.get('question_limit', 10))
         allow_followups = request.form.get('allow_followups', 'false') == 'true'
         enable_web_research = request.form.get('enable_web_research', 'false') == 'true'
+        enable_ai_feedback = request.form.get('enable_ai_feedback', 'false') == 'true'
 
         if not selected_executives:
             return jsonify({'status': 'error', 'error': 'Please select at least one executive'})
 
         print(f"📄 Processing PDF for {company_name}...")
-        print(f"   Settings: followups={allow_followups}, research={enable_web_research}")
+        print(f"   Settings: followups={allow_followups}, research={enable_web_research}, feedback={enable_ai_feedback}")
 
         # Save PDF temporarily for Vision API
         filename = secure_filename(file.filename)
@@ -1025,6 +1117,7 @@ def upload_report():
                 question_limit=question_limit,
                 allow_followups=allow_followups,
                 enable_web_research=enable_web_research,
+                enable_ai_feedback=enable_ai_feedback,
                 company_research=company_research
             )
 
@@ -1503,6 +1596,13 @@ def end_session():
             'executives_involved': executives_involved
         }
 
+        # Generate AI feedback if opted in
+        if session_data.get('enable_ai_feedback') and questions and responses:
+            ai_feedback = generate_session_feedback(session_data, questions, responses)
+            if ai_feedback:
+                db.update_session(sid, ai_feedback=json.dumps(ai_feedback))
+                summary['ai_feedback'] = ai_feedback
+
         return jsonify({
             'status': 'success',
             'summary': summary
@@ -1663,6 +1763,49 @@ def download_transcript():
             response_marker = " [Audio Response]" if response['response_type'] == 'audio' else ""
             story.append(Paragraph(f"A{response_marker}: {response['response_text']}", response_style))
             story.append(Spacer(1, 0.1*inch))
+
+        # AI Feedback section (if available)
+        if session_data.get('ai_feedback'):
+            try:
+                feedback = json.loads(session_data['ai_feedback']) if isinstance(session_data['ai_feedback'], str) else session_data['ai_feedback']
+
+                if isinstance(feedback.get('strengths'), list) and isinstance(feedback.get('improvements'), list):
+                    story.append(Spacer(1, 0.3*inch))
+                    story.append(Paragraph("AI Performance Feedback", header_style))
+                    story.append(Spacer(1, 0.1*inch))
+
+                    # Strengths
+                    strength_label_style = ParagraphStyle(
+                        'StrengthLabel',
+                        parent=styles['Normal'],
+                        fontSize=11,
+                        textColor=colors.HexColor('#28a745'),
+                        fontName='Helvetica-Bold',
+                        spaceAfter=6
+                    )
+                    story.append(Paragraph("What You Did Well", strength_label_style))
+                    for item in feedback['strengths']:
+                        story.append(Paragraph(f"<b>{item.get('title', '')}</b>", question_style))
+                        story.append(Paragraph(item.get('detail', ''), response_style))
+
+                    story.append(Spacer(1, 0.15*inch))
+
+                    # Improvements
+                    improve_label_style = ParagraphStyle(
+                        'ImproveLabel',
+                        parent=styles['Normal'],
+                        fontSize=11,
+                        textColor=colors.HexColor('#BF5700'),
+                        fontName='Helvetica-Bold',
+                        spaceAfter=6
+                    )
+                    story.append(Paragraph("Areas for Improvement", improve_label_style))
+                    for item in feedback['improvements']:
+                        story.append(Paragraph(f"<b>{item.get('title', '')}</b>", question_style))
+                        story.append(Paragraph(item.get('detail', ''), response_style))
+
+            except (json.JSONDecodeError, TypeError) as e:
+                print(f"Warning: Could not parse AI feedback for transcript: {e}")
 
         # Build PDF
         doc.build(story)

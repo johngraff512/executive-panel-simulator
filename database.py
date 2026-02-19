@@ -45,6 +45,8 @@ def init_database():
                 question_limit INTEGER DEFAULT 10,
                 allow_followups BOOLEAN DEFAULT 0,
                 enable_web_research BOOLEAN DEFAULT 0,
+                enable_ai_feedback BOOLEAN DEFAULT 0,
+                ai_feedback TEXT,  -- JSON with strengths/improvements arrays
                 company_research TEXT,  -- JSON object with research data
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -82,12 +84,22 @@ def init_database():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_responses_session ON responses(session_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at)')
 
+        # Migration: add AI feedback columns if they don't exist
+        try:
+            cursor.execute('ALTER TABLE sessions ADD COLUMN enable_ai_feedback BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        try:
+            cursor.execute('ALTER TABLE sessions ADD COLUMN ai_feedback TEXT')
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         print("✅ Database initialized successfully")
 
 def create_session(session_id, company_name, industry, report_type,
                   selected_executives, report_content, key_details,
                   question_limit, allow_followups=False, enable_web_research=False,
-                  company_research=None):
+                  enable_ai_feedback=False, company_research=None):
     """Create a new session (or replace existing if session_id already exists)"""
     with get_db() as conn:
         cursor = conn.cursor()
@@ -96,8 +108,8 @@ def create_session(session_id, company_name, industry, report_type,
             INSERT OR REPLACE INTO sessions
             (session_id, company_name, industry, report_type, selected_executives,
              report_content, key_details, question_limit, allow_followups,
-             enable_web_research, company_research, used_topics)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             enable_web_research, enable_ai_feedback, company_research, used_topics)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             session_id,
             company_name,
@@ -109,6 +121,7 @@ def create_session(session_id, company_name, industry, report_type,
             question_limit,
             allow_followups,
             enable_web_research,
+            enable_ai_feedback,
             json.dumps(company_research) if company_research else None,
             json.dumps([])  # Empty used_topics initially
         ))
