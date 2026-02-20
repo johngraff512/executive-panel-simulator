@@ -2541,14 +2541,38 @@
                         this.audioElement.src = '';
                     }
 
+                    // Show loading state on all trigger buttons
+                    const endSessionBtn = document.getElementById('end-session-btn');
+                    const viewSummaryBtn = document.querySelector('[onclick="simulator.endSession()"]');
+                    const originalEndText = endSessionBtn ? endSessionBtn.innerHTML : '';
+                    const originalViewText = viewSummaryBtn ? viewSummaryBtn.innerHTML : '';
+
+                    if (endSessionBtn) {
+                        endSessionBtn.disabled = true;
+                        endSessionBtn.innerHTML = '<i class="fas fa-spinner fa-spin tw-mr-1"></i> Generating Feedback...';
+                    }
+                    if (viewSummaryBtn) {
+                        viewSummaryBtn.disabled = true;
+                        viewSummaryBtn.innerHTML = '<i class="fas fa-spinner fa-spin tw-mr-2"></i> Generating Feedback...';
+                    }
+
                     const response = await fetch('/end_session', { method: 'POST' });
                     const data = await response.json();
 
                     if (data.status === 'success') {
                         this.showSessionSummary(data.summary);
+                    } else {
+                        // Restore buttons on error
+                        if (endSessionBtn) { endSessionBtn.disabled = false; endSessionBtn.innerHTML = originalEndText; }
+                        if (viewSummaryBtn) { viewSummaryBtn.disabled = false; viewSummaryBtn.innerHTML = originalViewText; }
                     }
                 } catch (error) {
                     alert('Error ending session: ' + error.message);
+                    // Restore buttons on error
+                    const endSessionBtn = document.getElementById('end-session-btn');
+                    const viewSummaryBtn = document.querySelector('[onclick="simulator.endSession()"]');
+                    if (endSessionBtn) { endSessionBtn.disabled = false; }
+                    if (viewSummaryBtn) { viewSummaryBtn.disabled = false; }
                 }
             }
             
