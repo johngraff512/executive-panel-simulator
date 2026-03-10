@@ -1317,6 +1317,7 @@ def launch_panel():
         question_limit = int(data.get('question_limit', 10))
         allow_followups = data.get('allow_followups', False)
         enable_web_research = data.get('enable_web_research', False)
+        enable_ai_feedback = data.get('enable_ai_feedback', False)
 
         if not selected_executives:
             return jsonify({'status': 'error', 'error': 'Please select at least one executive'})
@@ -1376,6 +1377,7 @@ def launch_panel():
             question_limit=question_limit,
             allow_followups=allow_followups,
             enable_web_research=enable_web_research,
+            enable_ai_feedback=enable_ai_feedback,
             company_research=company_research
         )
 

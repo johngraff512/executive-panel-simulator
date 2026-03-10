@@ -2323,6 +2323,7 @@
                 const questionLimit = document.getElementById('question-limit').value;
                 const allowFollowups = document.getElementById('allow-followups').checked;
                 const enableResearch = document.getElementById('enable-research').checked;
+                const enableAiFeedback = document.getElementById('enable-ai-feedback').checked;
 
                 // Show upload progress (fast now - only 3 seconds!)
                 this.showUploadProgress();
@@ -2342,7 +2343,8 @@
                             executives: this.selectedExecutives,
                             question_limit: parseInt(questionLimit),
                             allow_followups: allowFollowups,
-                            enable_web_research: enableResearch
+                            enable_web_research: enableResearch,
+                            enable_ai_feedback: enableAiFeedback
                         })
                     });
 
