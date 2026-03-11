@@ -33,6 +33,49 @@ import database as db
 
 CST = pytz.timezone('America/Chicago')
 
+# ============================================================================
+# PROGRESSIVE ANALYSIS CACHE (Option C Implementation)
+# ============================================================================
+# Use database-backed cache for progressive background analysis
+# Database storage persists across Gunicorn workers (unlike in-memory or cookies)
+# Flask session ID is used as the cache key (only small session ID stored in cookie)
+
+def get_flask_session_id():
+    """Get or create a unique cache ID stored in Flask session"""
+    # Create a unique cache ID and store it in the session cookie
+    # This small UUID (~36 chars) fits easily in cookie, used as DB lookup key
+    if 'cache_id' not in session:
+        import uuid
+        session['cache_id'] = str(uuid.uuid4())
+        print(f"🆔 Created new cache ID: {session['cache_id'][:20]}...")
+    return session['cache_id']
+
+def cache_extraction(extraction_result):
+    """Cache extraction results in database"""
+    flask_sid = get_flask_session_id()
+    db.save_progressive_cache_extraction(flask_sid, extraction_result)
+
+def cache_ai_analysis(key_details):
+    """Cache AI analysis results in database"""
+    flask_sid = get_flask_session_id()
+    db.save_progressive_cache_analysis(flask_sid, key_details)
+
+def cache_web_research(company_research):
+    """Cache web research results in database"""
+    flask_sid = get_flask_session_id()
+    db.save_progressive_cache_research(flask_sid, company_research)
+
+def get_cached_data():
+    """Retrieve all cached data from database"""
+    flask_sid = get_flask_session_id()
+    return db.get_progressive_cache(flask_sid)
+
+def clear_cache():
+    """Clear cached data after session is created"""
+    flask_sid = get_flask_session_id()
+    db.delete_progressive_cache(flask_sid)
+# ============================================================================
+
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
@@ -567,7 +610,16 @@ Document:
 
         result = json.loads(response.choices[0].message.content)
         key_details = result.get('key_details', [])
-        print(f"📊 Extracted {len(key_details)} strategic recommendations and analyses for executive questioning")
+
+        print(f"\n{'='*80}")
+        print(f"📊 DOCUMENT ANALYSIS RESULTS ({len(key_details)} items extracted)")
+        print(f"{'='*80}")
+        for i, detail in enumerate(key_details[:15], 1):
+            # Truncate very long details for readability
+            display_detail = detail if len(detail) <= 150 else detail[:147] + "..."
+            print(f"{i:2}. {display_detail}")
+        print(f"{'='*80}\n")
+
         return key_details[:15]
 
     except Exception as e:
@@ -626,7 +678,21 @@ Provide factual, verifiable information. If you don't have current information, 
         )
 
         research_summary = response.choices[0].message.content
-        print(f"✅ Research complete: {len(research_summary)} characters")
+
+        print(f"\n{'='*80}")
+        print(f"🌐 WEB RESEARCH RESULTS for {company_name}")
+        print(f"{'='*80}")
+        # Print first 800 characters with word boundary
+        if len(research_summary) > 800:
+            truncated = research_summary[:800]
+            last_space = truncated.rfind(' ')
+            if last_space > 600:
+                truncated = truncated[:last_space]
+            print(f"{truncated}...")
+            print(f"\n[... {len(research_summary) - len(truncated)} more characters]")
+        else:
+            print(research_summary)
+        print(f"{'='*80}\n")
 
         return {
             'company_name': company_name,
@@ -658,8 +724,38 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
         unused_topics = all_key_details
         used_topics.clear()
 
+    # Filter out topics that are too similar to recent conversation
+    # Extract numbers from previous questions to avoid repetition
+    if conversation_history and len(conversation_history) > 0:
+        import re
+        recent_numbers = set()
+        for qa in conversation_history[-3:]:  # Check last 3 Q&As
+            # Extract dollar amounts and percentages
+            numbers = re.findall(r'\$[\d,]+\.?\d*[MBK]?|\d+%', qa['question'])
+            recent_numbers.update(numbers)
+
+        # Prefer topics that don't contain the same numbers
+        filtered_topics = []
+        for topic in unused_topics:
+            topic_numbers = set(re.findall(r'\$[\d,]+\.?\d*[MBK]?|\d+%', topic))
+            # If this topic doesn't share numbers with recent questions, it's preferred
+            if not topic_numbers.intersection(recent_numbers):
+                filtered_topics.append(topic)
+
+        # Use filtered topics if we found any, otherwise use all unused topics
+        if filtered_topics:
+            print(f"🎯 Topic diversity: {len(filtered_topics)}/{len(unused_topics)} topics avoid number repetition")
+            unused_topics = filtered_topics
+
     selected_topic = random.choice(unused_topics)
     topic_index = all_key_details.index(selected_topic)
+
+    # Log which topic is being used for this question
+    topic_display = selected_topic if len(selected_topic) <= 120 else selected_topic[:117] + "..."
+    print(f"\n{'─'*80}")
+    print(f"❓ Question #{question_number} for {executive}")
+    print(f"   Selected topic: {topic_display}")
+    print(f"{'─'*80}")
 
     try:
         role_focus = {
@@ -677,27 +773,59 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
         if company_research:
             research_context = f"\nRecent company research: {company_research.get('summary', '')[:300]}"
 
-        # Format conversation history for context
+        # Format conversation history for context with explicit repetition detection
         conversation_context = ""
+        avoid_keywords = set()  # Track specific numbers/terms to avoid
+
         if conversation_history and len(conversation_history) > 0:
             conversation_context = "\n\nPREVIOUS CONVERSATION:\n"
             for i, qa in enumerate(conversation_history[-5:], 1):  # Last 5 Q&As
                 conversation_context += f"\nQ{i} ({qa['executive']}): {qa['question']}\n"
                 conversation_context += f"A{i}: {qa['response'][:200]}{'...' if len(qa['response']) > 200 else ''}\n"
 
+                # Extract specific numbers and key terms from previous questions
+                import re
+                # Find dollar amounts like $532M, $455.5M
+                dollar_amounts = re.findall(r'\$[\d,]+\.?\d*[MBK]?', qa['question'])
+                avoid_keywords.update(dollar_amounts)
+
+                # Find percentage values like 40%, 30%
+                percentages = re.findall(r'\d+%', qa['question'])
+                avoid_keywords.update(percentages)
+
+                # Extract key phrases (2-4 word sequences)
+                words = qa['question'].lower().split()
+                for j in range(len(words) - 1):
+                    if len(words[j]) > 3 and len(words[j+1]) > 3:  # Skip short words
+                        avoid_keywords.add(f"{words[j]} {words[j+1]}")
+
             # Extract topics already covered
             covered_topics = set()
             for qa in conversation_history:
-                # Simple keyword extraction from questions
-                if 'market' in qa['question'].lower():
-                    covered_topics.add('market analysis')
-                if 'financial' in qa['question'].lower() or 'revenue' in qa['question'].lower():
+                # Enhanced keyword extraction from questions
+                q_lower = qa['question'].lower()
+                if 'market' in q_lower or 'customer' in q_lower:
+                    covered_topics.add('market/customer analysis')
+                if 'financial' in q_lower or 'revenue' in q_lower or 'profit' in q_lower or 'investment' in q_lower:
                     covered_topics.add('financial projections')
-                if 'customer' in qa['question'].lower():
-                    covered_topics.add('customer acquisition')
+                if 'technology' in q_lower or 'technical' in q_lower or 'system' in q_lower:
+                    covered_topics.add('technical implementation')
+                if 'competitive' in q_lower or 'competitor' in q_lower:
+                    covered_topics.add('competitive strategy')
+                if 'operational' in q_lower or 'execution' in q_lower or 'implement' in q_lower:
+                    covered_topics.add('operational execution')
+                if 'risk' in q_lower or 'contingency' in q_lower:
+                    covered_topics.add('risk management')
 
             if covered_topics:
-                conversation_context += f"\nTopics already discussed: {', '.join(covered_topics)}\n"
+                conversation_context += f"\n⚠️ Topics already discussed: {', '.join(covered_topics)}\n"
+                conversation_context += "DO NOT ask about these topics again. Find a completely different aspect.\n"
+
+            if avoid_keywords:
+                # Show specific numbers/phrases to avoid
+                sample_keywords = list(avoid_keywords)[:8]  # Show first 8 examples
+                conversation_context += f"\n⚠️ Avoid repeating these specific numbers/terms: {', '.join(sample_keywords)}\n"
+                conversation_context += "Find a DIFFERENT strategic recommendation or analysis that hasn't been discussed.\n"
 
         prompt = f"""You are the {executive} of a company evaluating this {report_type} from {company_name} in the {industry} industry.
 
@@ -709,7 +837,10 @@ Your role focuses on: {focus}{research_context}{conversation_context}
 Generate ONE tough, probing question that CHALLENGES or CLARIFIES this specific recommendation/analysis. Your question should:
 
 1. DIRECTLY REFERENCE what they proposed or analyzed (use specifics from the topic above)
-2. NOT repeat topics already covered in previous questions (if any are listed above)
+2. CRITICAL: If previous questions are listed above, DO NOT repeat the same topics, numbers, or themes
+   - Avoid using the same dollar amounts, percentages, or initiatives mentioned in previous questions
+   - If financial projections were already discussed, focus on a different aspect (operations, tech, market, etc.)
+   - Ask about a completely different strategic recommendation or analysis
 3. Build on or reference the presenter's previous responses when relevant
 4. Challenge one of these aspects:
    - The underlying assumptions or logic
@@ -748,7 +879,12 @@ Return ONLY the question text, no preamble or explanation."""
         )
 
         question = response.choices[0].message.content.strip()
-        print(f"🎯 {executive} Q#{question_number} on topic: {selected_topic[:50]}...")
+
+        # Log the generated question
+        question_display = question if len(question) <= 150 else question[:147] + "..."
+        print(f"   ✅ Generated: {question_display}")
+        print(f"{'─'*80}\n")
+
         return question, topic_index
 
     except Exception as e:
@@ -1019,10 +1155,278 @@ def index():
     # Don't clear session data - it's persistent in DB now
     return render_template('index.html', ai_available=openai_available)
 
+# ============================================================================
+# PROGRESSIVE ANALYSIS ENDPOINTS (Option C)
+# ============================================================================
+
+@app.route('/upload_pdf', methods=['POST'])
+def upload_pdf():
+    """
+    Step 1: Handle PDF upload and start extraction immediately
+    Stores results in Flask session (persists across Gunicorn workers)
+    """
+    try:
+        if 'report' not in request.files:
+            return jsonify({'status': 'error', 'error': 'No file uploaded'})
+
+        file = request.files['report']
+        if file.filename == '':
+            return jsonify({'status': 'error', 'error': 'No file selected'})
+
+        if not file.filename.lower().endswith('.pdf'):
+            return jsonify({'status': 'error', 'error': 'Please upload a PDF file'})
+
+        print(f"📄 Starting PDF extraction...")
+
+        # Generate unique temp filename for PDF
+        import uuid
+        temp_id = str(uuid.uuid4())[:8]
+
+        # Save PDF temporarily
+        filename = secure_filename(file.filename)
+        temp_pdf_path = os.path.join(UPLOAD_FOLDER, f"temp_{temp_id}_{filename}")
+        file.save(temp_pdf_path)
+
+        try:
+            # Extract comprehensive content from PDF (text, tables, embedded images)
+            # This is the slowest part (~60 seconds for large reports)
+            file.seek(0)  # Reset file pointer
+            extraction_result = comprehensive_pdf_extraction(file, analyze_images_flag=True)
+
+            if not extraction_result or not extraction_result['combined_content']:
+                return jsonify({'status': 'error', 'error': 'Could not extract content from PDF'})
+
+            report_text = extraction_result['combined_content']
+
+            print(f"✅ Extraction complete: {len(report_text)} characters")
+            print(f"   📊 Tables: {len(extraction_result['tables'])}, 🖼️ Images: {len(extraction_result['images'])}")
+
+            # Cache extraction results (exclude raw image bytes - only metadata)
+            cache_extraction({
+                'combined_content': report_text,
+                'tables': extraction_result['tables'],
+                'image_count': len(extraction_result['images']),  # Just count, not bytes
+                'image_descriptions': extraction_result['image_descriptions']
+            })
+
+            return jsonify({
+                'status': 'success',
+                'extraction_complete': True,
+                'char_count': len(report_text),
+                'table_count': len(extraction_result['tables']),
+                'image_count': len(extraction_result['images'])
+            })
+
+        finally:
+            # Clean up temp PDF file
+            if os.path.exists(temp_pdf_path):
+                os.remove(temp_pdf_path)
+
+    except Exception as e:
+        print(f"Upload error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': f'Error processing file: {str(e)}'})
+
+
+@app.route('/analyze_content', methods=['POST'])
+def analyze_content():
+    """
+    Step 2: Perform AI analysis with company context
+    Uses cached extraction from Step 1 (Flask session)
+    """
+    try:
+        data = request.get_json()
+        company_name = data.get('company_name', 'Your Company')
+        industry = data.get('industry', 'Technology')
+        report_type = data.get('report_type', 'Business Plan')
+
+        # Get cached extraction from Flask session
+        cached_data = get_cached_data()
+        if 'extraction' not in cached_data:
+            return jsonify({'status': 'error', 'error': 'Extraction data not found. Please re-upload PDF.'})
+
+        extraction = cached_data['extraction']
+        report_text = extraction['combined_content']
+
+        print(f"🔍 Analyzing document for {company_name}...")
+
+        # Analyze document to extract key strategic details
+        key_details = analyze_document_with_ai(
+            report_text, None, company_name, industry, report_type
+        )
+
+        # Cache AI analysis in Flask session
+        cache_ai_analysis(key_details)
+
+        return jsonify({
+            'status': 'success',
+            'analysis_complete': True,
+            'key_details_count': len(key_details)
+        })
+
+    except Exception as e:
+        print(f"Analysis error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': f'Error analyzing content: {str(e)}'})
+
+
+@app.route('/research_company', methods=['POST'])
+def research_company_endpoint():
+    """
+    Step 3: Optional web research for company background
+    Uses cached data from previous steps (Flask session)
+    """
+    try:
+        data = request.get_json()
+        company_name = data.get('company_name')
+        enable_web_research = data.get('enable_web_research', False)
+
+        company_research = None
+        if enable_web_research and company_name:
+            print(f"🌐 Researching {company_name} online...")
+            company_research = research_company_online(company_name)
+            cache_web_research(company_research)
+
+        return jsonify({
+            'status': 'success',
+            'research_complete': True,
+            'research_enabled': company_research is not None
+        })
+
+    except Exception as e:
+        print(f"Research error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': f'Error researching company: {str(e)}'})
+
+
+@app.route('/launch_panel', methods=['POST'])
+def launch_panel():
+    """
+    Step 4: Launch panel session with first question
+    Uses all cached data from previous steps (3-second final operation)
+    """
+    try:
+        data = request.get_json()
+        company_name = data.get('company_name', 'Your Company')
+        industry = data.get('industry', 'Technology')
+        report_type = data.get('report_type', 'Business Plan')
+        selected_executives = data.get('executives', [])
+        question_limit = int(data.get('question_limit', 10))
+        allow_followups = data.get('allow_followups', False)
+        enable_web_research = data.get('enable_web_research', False)
+
+        if not selected_executives:
+            return jsonify({'status': 'error', 'error': 'Please select at least one executive'})
+
+        # Get all cached data from Flask session
+        cached_data = get_cached_data()
+
+        # Check for extraction (required - can't proceed without it)
+        if 'extraction' not in cached_data:
+            print(f"❌ No extraction found in cache!")
+            print(f"   Cache keys present: {list(cached_data.keys())}")
+            return jsonify({'status': 'error', 'error': 'Extraction data not found. Please restart wizard.'})
+
+        extraction = cached_data['extraction']
+
+        # If AI analysis is missing, run it now (handles race condition)
+        if 'ai_analysis' not in cached_data:
+            print(f"⚠️ AI analysis not in cache yet - running now...")
+            report_text = extraction['combined_content']
+            key_details = analyze_document_with_ai(
+                report_text, None, company_name, industry, report_type
+            )
+            cache_ai_analysis(key_details)
+            print(f"✅ AI analysis completed on-demand: {len(key_details)} details")
+        else:
+            key_details = cached_data['ai_analysis']
+
+        company_research = cached_data.get('web_research', None)
+
+        full_content = extraction['combined_content']
+
+        print(f"🚀 Launching panel session for {company_name}...")
+        print(f"   Using cached extraction ({len(full_content)} chars) and analysis ({len(key_details)} details)")
+
+        # Generate first question (fast - only ~3 seconds)
+        first_executive = selected_executives[0]
+        first_question, first_topic = generate_ai_questions_with_topic_diversity(
+            full_content, first_executive, company_name, industry, report_type,
+            key_details, [], 1, company_research,
+            conversation_history=[]  # First question, no history yet
+        )
+
+        # Generate TTS for first question
+        exec_name = get_executive_name(first_executive)
+        first_tts_url = generate_tts_audio(first_question, exec_name)
+
+        # Create session in database
+        sid = get_session_id()
+        db.create_session(
+            session_id=sid,
+            company_name=company_name,
+            industry=industry,
+            report_type=report_type,
+            selected_executives=selected_executives,
+            report_content=full_content,
+            key_details=key_details,
+            question_limit=question_limit,
+            allow_followups=allow_followups,
+            enable_web_research=enable_web_research,
+            company_research=company_research
+        )
+
+        # Add first question to database
+        db.add_question(
+            session_id=sid,
+            executive=first_executive,
+            executive_name=exec_name,
+            question_text=first_question,
+            is_followup=False
+        )
+
+        # Update session with first topic used
+        db.update_session(sid, used_topics=[first_topic], current_question_count=1)
+
+        # Clear progressive cache now that session is created
+        clear_cache()
+
+        print(f"🎯 {first_executive} asking first question")
+        print(f"💾 Session {sid} created in database")
+
+        return jsonify({
+            'status': 'success',
+            'first_question': {
+                'executive': first_executive,
+                'name': exec_name,
+                'title': first_executive,
+                'question': first_question,
+                'timestamp': datetime.now(CST).isoformat(),
+                'tts_url': first_tts_url,
+                'image': get_executive_image(first_executive)
+            },
+            'ai_mode': 'enabled' if openai_available else 'demo',
+            'research_enabled': enable_web_research and company_research is not None
+        })
+
+    except Exception as e:
+        print(f"Launch error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'error': f'Error launching panel: {str(e)}'})
+
+# ============================================================================
+# LEGACY ENDPOINT (Keep for backward compatibility)
+# ============================================================================
+
 @app.route('/upload_report', methods=['POST'])
 def upload_report():
     """
-    Handle PDF upload and analysis
+    LEGACY: Handle PDF upload and analysis in one step
+    Kept for backward compatibility with old frontend
     Now with Vision API support and optional web research
     """
     try:
