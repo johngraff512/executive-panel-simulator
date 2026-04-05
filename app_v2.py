@@ -85,18 +85,35 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # ✅ 50MB for larger files
 UPLOAD_FOLDER = tempfile.gettempdir()
 ALLOWED_AUDIO_EXTENSIONS = {'webm', 'mp3', 'wav', 'm4a', 'ogg'}
 
-# Initialize OpenAI client
+# Initialize OpenAI client (direct or via Portkey gateway)
 openai_client = None
 openai_available = False
 
 try:
-    api_key = os.environ.get('OPENAI_API_KEY')
-    if api_key:
-        openai_client = openai.OpenAI(api_key=api_key)
+    portkey_api_key = os.environ.get('PORTKEY_API_KEY')
+    portkey_virtual_key = os.environ.get('PORTKEY_VIRTUAL_KEY')
+    openai_api_key = os.environ.get('OPENAI_API_KEY')
+
+    if portkey_api_key and portkey_virtual_key:
+        # Route through UT Portkey gateway
+        from portkey_ai import PORTKEY_GATEWAY_URL, createHeaders
+        openai_client = openai.OpenAI(
+            api_key="portkey",
+            base_url=PORTKEY_GATEWAY_URL,
+            default_headers=createHeaders(
+                api_key=portkey_api_key,
+                virtual_key=portkey_virtual_key
+            )
+        )
         openai_available = True
-        print("✅ OpenAI API key found - AI-powered questions enabled")
+        print("✅ Portkey gateway configured - using UT API access")
+    elif openai_api_key:
+        # Fall back to direct OpenAI
+        openai_client = openai.OpenAI(api_key=openai_api_key)
+        openai_available = True
+        print("✅ Direct OpenAI API configured")
     else:
-        print("⚠️  No OpenAI API key found - running in demo mode")
+        print("⚠️  No API keys found - running in demo mode")
 except Exception as e:
     print(f"❌ OpenAI initialization failed: {e}")
     import traceback
