@@ -102,7 +102,8 @@ try:
             base_url=PORTKEY_GATEWAY_URL,
             default_headers=createHeaders(
                 api_key=portkey_api_key,
-                virtual_key=portkey_virtual_key
+                virtual_key=portkey_virtual_key,
+                metadata={"app": "executive-panel-simulator"}
             )
         )
         openai_available = True
