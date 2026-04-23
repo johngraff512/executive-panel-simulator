@@ -1411,8 +1411,9 @@ def launch_panel():
         # Update session with first topic used
         db.update_session(sid, used_topics=[first_topic], current_question_count=1)
 
-        # Clear progressive cache now that session is created
-        clear_cache()
+        # Keep progressive cache so "Same Company, New Panel" can reuse the
+        # extraction/analysis without re-uploading. Cache is overwritten on
+        # any new upload (INSERT OR REPLACE) and auto-expires after 1 hour.
 
         print(f"🎯 {first_executive} asking first question")
         print(f"💾 Session {sid} created in database")
