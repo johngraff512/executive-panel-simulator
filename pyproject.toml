@@ -1,7 +1,7 @@
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-exclude = ["venv", "flask_session", "script_1.py", "script_2.py", "script_3.py"]
+exclude = ["venv", "flask_session"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "B", "UP", "SIM", "I"]
