@@ -8,30 +8,28 @@ Enhanced with:
 - Executive headshot images
 """
 
-import os
-import tempfile
-import random
-from datetime import datetime
-from flask import Flask, render_template, request, jsonify, session, Response
-from werkzeug.utils import secure_filename
-import PyPDF2
-import fitz  # PyMuPDF
-import pdfplumber
-import openai
-import pytz
 import base64
-import requests
-from bs4 import BeautifulSoup
-from pdf2image import convert_from_path, convert_from_bytes
-from PIL import Image
 import io
-from io import BytesIO
 import json
+import os
+import random
+import tempfile
+from datetime import datetime
+from io import BytesIO
+
+import fitz  # PyMuPDF
+import openai
+import pdfplumber
+import PyPDF2
+import pytz
+from flask import Flask, Response, jsonify, render_template, request, session
+from pdf2image import convert_from_path
+from werkzeug.utils import secure_filename
 
 # Import database module
 import database as db
 
-CST = pytz.timezone('America/Chicago')
+CST = pytz.timezone("America/Chicago")
 
 # ============================================================================
 # PROGRESSIVE ANALYSIS CACHE (Option C Implementation)
@@ -40,71 +38,79 @@ CST = pytz.timezone('America/Chicago')
 # Database storage persists across Gunicorn workers (unlike in-memory or cookies)
 # Flask session ID is used as the cache key (only small session ID stored in cookie)
 
+
 def get_flask_session_id():
     """Get or create a unique cache ID stored in Flask session"""
     # Create a unique cache ID and store it in the session cookie
     # This small UUID (~36 chars) fits easily in cookie, used as DB lookup key
-    if 'cache_id' not in session:
+    if "cache_id" not in session:
         import uuid
-        session['cache_id'] = str(uuid.uuid4())
+
+        session["cache_id"] = str(uuid.uuid4())
         print(f"🆔 Created new cache ID: {session['cache_id'][:20]}...")
-    return session['cache_id']
+    return session["cache_id"]
+
 
 def cache_extraction(extraction_result):
     """Cache extraction results in database"""
     flask_sid = get_flask_session_id()
     db.save_progressive_cache_extraction(flask_sid, extraction_result)
 
+
 def cache_ai_analysis(key_details):
     """Cache AI analysis results in database"""
     flask_sid = get_flask_session_id()
     db.save_progressive_cache_analysis(flask_sid, key_details)
+
 
 def cache_web_research(company_research):
     """Cache web research results in database"""
     flask_sid = get_flask_session_id()
     db.save_progressive_cache_research(flask_sid, company_research)
 
+
 def get_cached_data():
     """Retrieve all cached data from database"""
     flask_sid = get_flask_session_id()
     return db.get_progressive_cache(flask_sid)
 
+
 def clear_cache():
     """Clear cached data after session is created"""
     flask_sid = get_flask_session_id()
     db.delete_progressive_cache(flask_sid)
+
+
 # ============================================================================
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-railway-deployment')
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # ✅ 50MB for larger files
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "fallback-secret-key-for-railway-deployment")
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # ✅ 50MB for larger files
 
 # Upload configuration
 UPLOAD_FOLDER = tempfile.gettempdir()
-ALLOWED_AUDIO_EXTENSIONS = {'webm', 'mp3', 'wav', 'm4a', 'ogg'}
+ALLOWED_AUDIO_EXTENSIONS = {"webm", "mp3", "wav", "m4a", "ogg"}
 
 # Initialize OpenAI client (direct or via Portkey gateway)
 openai_client = None
 openai_available = False
 
 try:
-    portkey_api_key = os.environ.get('PORTKEY_API_KEY')
-    portkey_virtual_key = os.environ.get('PORTKEY_VIRTUAL_KEY')
-    openai_api_key = os.environ.get('OPENAI_API_KEY')
+    portkey_api_key = os.environ.get("PORTKEY_API_KEY")
+    portkey_virtual_key = os.environ.get("PORTKEY_VIRTUAL_KEY")
+    openai_api_key = os.environ.get("OPENAI_API_KEY")
 
     if portkey_api_key and portkey_virtual_key:
         # Route through UT Portkey gateway
         from portkey_ai import PORTKEY_GATEWAY_URL, createHeaders
+
         openai_client = openai.OpenAI(
             api_key="portkey",
             base_url=PORTKEY_GATEWAY_URL,
             default_headers=createHeaders(
-                api_key=portkey_api_key,
-                virtual_key=portkey_virtual_key,
-                metadata={"app": "executive-panel-simulator"}
-            )
+                api_key=portkey_api_key, virtual_key=portkey_virtual_key, metadata={"app": "executive-panel-simulator"}
+            ),
         )
         openai_available = True
         print("✅ Portkey gateway configured - using UT API access")
@@ -118,47 +124,54 @@ try:
 except Exception as e:
     print(f"❌ OpenAI initialization failed: {e}")
     import traceback
+
     traceback.print_exc()
     openai_available = False
 
 # Executive Management
 EXECUTIVE_NAMES = {
-    'CEO': 'Sarah Chen',
-    'CFO': 'Michael Rodriguez',
-    'CTO': 'Dr. Lisa Kincaid',
-    'CMO': 'James Thompson',
-    'COO': 'Rebecca Johnson'
+    "CEO": "Sarah Chen",
+    "CFO": "Michael Rodriguez",
+    "CTO": "Dr. Lisa Kincaid",
+    "CMO": "James Thompson",
+    "COO": "Rebecca Johnson",
 }
 
 EXECUTIVE_IMAGE_MAPPING = {
-    'CEO': 'sarah_chen',
-    'CFO': 'michael_rodriguez',
-    'CTO': 'lisa_kincaid',
-    'CMO': 'james_thompson',
-    'COO': 'rebecca_johnson'
+    "CEO": "sarah_chen",
+    "CFO": "michael_rodriguez",
+    "CTO": "lisa_kincaid",
+    "CMO": "james_thompson",
+    "COO": "rebecca_johnson",
 }
+
 
 def get_session_id():
     """Get or create a session ID for the current user"""
-    if 'sid' not in session:
+    if "sid" not in session:
         import uuid
-        session['sid'] = str(uuid.uuid4())
-    return session['sid']
+
+        session["sid"] = str(uuid.uuid4())
+    return session["sid"]
+
 
 def get_executive_name(role):
     """Get the name for an executive role"""
     return EXECUTIVE_NAMES.get(role, role)
 
+
 def get_executive_image(role):
     """Get the image filename for an executive"""
-    return EXECUTIVE_IMAGE_MAPPING.get(role, 'sarah_chen')
+    return EXECUTIVE_IMAGE_MAPPING.get(role, "sarah_chen")
+
 
 def get_next_executive(selected_executives, current_count):
     """Rotate through executives evenly"""
     if not selected_executives:
-        return 'CEO'
+        return "CEO"
     index = (current_count - 1) % len(selected_executives)
     return selected_executives[index]
+
 
 # ========== NEW: Vision API for PDF Analysis ==========
 def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
@@ -170,7 +183,7 @@ def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
         return None, None
 
     try:
-        print(f"🔍 Analyzing PDF with Vision API...")
+        print("🔍 Analyzing PDF with Vision API...")
 
         # Convert PDF to images (first 3 pages to manage costs and time)
         images = convert_from_path(pdf_path, first_page=1, last_page=3)
@@ -184,11 +197,11 @@ def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
 
             # Convert PIL Image to bytes
             img_byte_arr = io.BytesIO()
-            img.save(img_byte_arr, format='PNG')
+            img.save(img_byte_arr, format="PNG")
             img_byte_arr.seek(0)
 
             # Encode image to base64
-            img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+            img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
             # Call Vision API (using gpt-4o which supports vision)
             response = openai_client.chat.completions.create(
@@ -199,19 +212,19 @@ def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
                         "content": [
                             {
                                 "type": "text",
-                                "text": f"Analyze this page from a {report_type} for {company_name} in the {industry} industry. Extract key business insights, data points from charts/graphs/tables, and strategic information. Be specific and comprehensive."
+                                "text": f"Analyze this page from a {report_type} for {company_name} in the {industry} industry. Extract key business insights, data points from charts/graphs/tables, and strategic information. Be specific and comprehensive.",
                             },
                             {
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/png;base64,{img_base64}",
-                                    "detail": "low"  # Use "low" for faster processing
-                                }
-                            }
-                        ]
+                                    "detail": "low",  # Use "low" for faster processing
+                                },
+                            },
+                        ],
                     }
                 ],
-                max_tokens=500  # Reduced for faster response
+                max_tokens=500,  # Reduced for faster response
             )
 
             page_analysis = response.choices[0].message.content
@@ -227,10 +240,13 @@ def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
     except Exception as e:
         print(f"❌ Vision API error: {e}")
         import traceback
+
         traceback.print_exc()
         return None, None
 
+
 # ========== Enhanced PDF Processing with PyMuPDF + pdfplumber ==========
+
 
 def truncate_at_appendix(text_content):
     """
@@ -250,21 +266,18 @@ def truncate_at_appendix(text_content):
     # Look for appendix keywords that appear as section headers
     patterns = [
         # "Appendix A" or "Appendix 1" etc. at start of line after page break
-        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*Appendix\s+[A-Z0-9]',
-        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*APPENDIX\s+[A-Z0-9]',
-
+        r"\n---\s+Page\s+\d+\s+---\s*\n+\s*Appendix\s+[A-Z0-9]",
+        r"\n---\s+Page\s+\d+\s+---\s*\n+\s*APPENDIX\s+[A-Z0-9]",
         # "Appendix" or "APPENDIX" followed by colon or newline (section header style)
-        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*Appendix\s*[:\n]',
-        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*APPENDIX\s*[:\n]',
-
+        r"\n---\s+Page\s+\d+\s+---\s*\n+\s*Appendix\s*[:\n]",
+        r"\n---\s+Page\s+\d+\s+---\s*\n+\s*APPENDIX\s*[:\n]",
         # "Appendices" as section header
-        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*Appendices\s*[:\n]',
-        r'\n---\s+Page\s+\d+\s+---\s*\n+\s*APPENDICES\s*[:\n]',
-
+        r"\n---\s+Page\s+\d+\s+---\s*\n+\s*Appendices\s*[:\n]",
+        r"\n---\s+Page\s+\d+\s+---\s*\n+\s*APPENDICES\s*[:\n]",
         # Alternative: Multiple newlines + "Appendix" at line start
-        r'\n\n\n+\s*Appendix\s+[A-Z0-9]',
-        r'\n\n\n+\s*APPENDIX\s+[A-Z0-9]',
-        r'\n\n\n+\s*Appendices\s*[:\n]',
+        r"\n\n\n+\s*Appendix\s+[A-Z0-9]",
+        r"\n\n\n+\s*APPENDIX\s+[A-Z0-9]",
+        r"\n\n\n+\s*Appendices\s*[:\n]",
     ]
 
     earliest_match = None
@@ -284,6 +297,7 @@ def truncate_at_appendix(text_content):
         return truncated, True, removed
 
     return text_content, False, 0
+
 
 def extract_text_and_images_with_pymupdf(pdf_bytes):
     """Extract text and images using PyMuPDF (fast and comprehensive)"""
@@ -308,13 +322,15 @@ def extract_text_and_images_with_pymupdf(pdf_bytes):
                     image_bytes = base_image["image"]
                     image_ext = base_image["ext"]
 
-                    images.append({
-                        'page': page_num + 1,
-                        'index': img_index,
-                        'bytes': image_bytes,
-                        'ext': image_ext,
-                        'size': len(image_bytes)
-                    })
+                    images.append(
+                        {
+                            "page": page_num + 1,
+                            "index": img_index,
+                            "bytes": image_bytes,
+                            "ext": image_ext,
+                            "size": len(image_bytes),
+                        }
+                    )
                 except Exception as e:
                     print(f"⚠️ Could not extract image {img_index} from page {page_num + 1}: {e}")
 
@@ -327,8 +343,10 @@ def extract_text_and_images_with_pymupdf(pdf_bytes):
     except Exception as e:
         print(f"❌ PyMuPDF extraction error: {e}")
         import traceback
+
         traceback.print_exc()
         return None, []
+
 
 def extract_tables_with_pdfplumber(pdf_bytes):
     """Extract tables using pdfplumber (best table detection)"""
@@ -344,13 +362,15 @@ def extract_tables_with_pdfplumber(pdf_bytes):
                 if tables:
                     for table_index, table in enumerate(tables):
                         if table and len(table) > 0:
-                            tables_data.append({
-                                'page': page_num + 1,
-                                'index': table_index,
-                                'data': table,
-                                'rows': len(table),
-                                'cols': len(table[0]) if table else 0
-                            })
+                            tables_data.append(
+                                {
+                                    "page": page_num + 1,
+                                    "index": table_index,
+                                    "data": table,
+                                    "rows": len(table),
+                                    "cols": len(table[0]) if table else 0,
+                                }
+                            )
 
         print(f"✅ pdfplumber: Found {len(tables_data)} tables")
         return tables_data
@@ -358,8 +378,10 @@ def extract_tables_with_pdfplumber(pdf_bytes):
     except Exception as e:
         print(f"❌ pdfplumber table extraction error: {e}")
         import traceback
+
         traceback.print_exc()
         return []
+
 
 def analyze_images_with_vision(images, max_images=5):
     """Analyze important embedded images using OpenAI Vision API"""
@@ -372,7 +394,7 @@ def analyze_images_with_vision(images, max_images=5):
 
     try:
         # Sort images by size and take the largest ones (likely most important)
-        sorted_images = sorted(images, key=lambda x: x['size'], reverse=True)
+        sorted_images = sorted(images, key=lambda x: x["size"], reverse=True)
         images_to_analyze = sorted_images[:max_images]
 
         print(f"🖼️ Analyzing {len(images_to_analyze)} embedded images with Vision API...")
@@ -382,38 +404,36 @@ def analyze_images_with_vision(images, max_images=5):
         for img in images_to_analyze:
             try:
                 # Convert image bytes to base64
-                img_b64 = base64.b64encode(img['bytes']).decode('utf-8')
+                img_b64 = base64.b64encode(img["bytes"]).decode("utf-8")
 
                 # Determine image format
-                mime_type = f"image/{img['ext']}" if img['ext'] in ['png', 'jpeg', 'jpg', 'gif', 'webp'] else "image/png"
+                mime_type = (
+                    f"image/{img['ext']}" if img["ext"] in ["png", "jpeg", "jpg", "gif", "webp"] else "image/png"
+                )
 
                 # Analyze with Vision API
                 response = openai_client.chat.completions.create(
                     model="gpt-4o",  # Using GPT-4o for vision
-                    messages=[{
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Analyze this image from a business report. Describe what it shows (chart, graph, diagram, etc.), extract any visible data or trends, and explain its business significance. Be concise but thorough."
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{mime_type};base64,{img_b64}",
-                                    "detail": "high"
-                                }
-                            }
-                        ]
-                    }],
-                    max_tokens=500
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Analyze this image from a business report. Describe what it shows (chart, graph, diagram, etc.), extract any visible data or trends, and explain its business significance. Be concise but thorough.",
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:{mime_type};base64,{img_b64}", "detail": "high"},
+                                },
+                            ],
+                        }
+                    ],
+                    max_tokens=500,
                 )
 
                 description = response.choices[0].message.content
-                image_descriptions.append({
-                    'page': img['page'],
-                    'description': description
-                })
+                image_descriptions.append({"page": img["page"], "description": description})
 
                 print(f"✅ Analyzed embedded image from page {img['page']}")
 
@@ -425,8 +445,10 @@ def analyze_images_with_vision(images, max_images=5):
     except Exception as e:
         print(f"❌ Vision API error: {e}")
         import traceback
+
         traceback.print_exc()
         return []
+
 
 def format_tables_for_analysis(tables_data):
     """Format extracted tables into readable text for AI analysis"""
@@ -436,11 +458,13 @@ def format_tables_for_analysis(tables_data):
     formatted = f"\n\n=== TABLES EXTRACTED ({len(tables_data)} found) ===\n"
 
     for table_info in tables_data:
-        formatted += f"\n--- Table on Page {table_info['page']} ({table_info['rows']} rows × {table_info['cols']} cols) ---\n"
+        formatted += (
+            f"\n--- Table on Page {table_info['page']} ({table_info['rows']} rows × {table_info['cols']} cols) ---\n"
+        )
 
-        table = table_info['data']
+        table = table_info["data"]
         # Format as markdown-style table
-        for row_idx, row in enumerate(table[:10]):  # Limit to first 10 rows per table
+        for row in table[:10]:  # Limit to first 10 rows per table
             if row:
                 formatted += " | ".join([str(cell) if cell else "" for cell in row]) + "\n"
 
@@ -448,6 +472,7 @@ def format_tables_for_analysis(tables_data):
             formatted += f"... ({len(table) - 10} more rows)\n"
 
     return formatted
+
 
 def format_images_for_analysis(image_descriptions):
     """Format image descriptions for AI analysis"""
@@ -462,6 +487,7 @@ def format_images_for_analysis(image_descriptions):
 
     return formatted
 
+
 def comprehensive_pdf_extraction(pdf_file, analyze_images_flag=True):
     """
     Comprehensive PDF extraction combining PyMuPDF, pdfplumber, and Vision API
@@ -475,9 +501,9 @@ def comprehensive_pdf_extraction(pdf_file, analyze_images_flag=True):
             'combined_content': str  # Formatted for AI analysis
         }
     """
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("🚀 Starting Comprehensive PDF Extraction")
-    print("="*60)
+    print("=" * 60)
 
     # Read PDF bytes once
     pdf_file.seek(0)
@@ -506,21 +532,22 @@ def comprehensive_pdf_extraction(pdf_file, analyze_images_flag=True):
 {format_images_for_analysis(image_descriptions)}
 """
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("✅ Comprehensive PDF Extraction Complete")
     print(f"   📝 Text: {len(text_content)} characters")
     print(f"   📊 Tables: {len(tables_data)} found")
     print(f"   🖼️ Images: {len(images)} extracted, {len(image_descriptions)} analyzed")
     print(f"   📦 Combined content: {len(combined_content)} characters")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
     return {
-        'text': text_content,
-        'tables': tables_data,
-        'images': images,
-        'image_descriptions': image_descriptions,
-        'combined_content': combined_content
+        "text": text_content,
+        "tables": tables_data,
+        "images": images,
+        "image_descriptions": image_descriptions,
+        "combined_content": combined_content,
     }
+
 
 # ========== Legacy PDF Processing (kept for backward compatibility) ==========
 def extract_text_from_pdf(pdf_file):
@@ -540,6 +567,7 @@ def extract_text_from_pdf(pdf_file):
         print(f"Error processing PDF: {e}")
         return None
 
+
 def analyze_document_with_ai(document_text, vision_analysis, company_name, industry, report_type):
     """
     Use OpenAI to extract strategic recommendations and analyses from document
@@ -557,11 +585,13 @@ def analyze_document_with_ai(document_text, vision_analysis, company_name, indus
         truncated_text = document_text
         if len(document_text) > MAX_TEXT_CHARS:
             # Take first 40%, last 40%, and sample from middle 20%
-            first_part = document_text[:int(MAX_TEXT_CHARS * 0.4)]
-            last_part = document_text[-int(MAX_TEXT_CHARS * 0.4):]
+            first_part = document_text[: int(MAX_TEXT_CHARS * 0.4)]
+            last_part = document_text[-int(MAX_TEXT_CHARS * 0.4) :]
             middle_start = len(document_text) // 2 - int(MAX_TEXT_CHARS * 0.1)
-            middle_part = document_text[middle_start:middle_start + int(MAX_TEXT_CHARS * 0.2)]
-            truncated_text = f"{first_part}\n\n... [middle section] ...\n\n{middle_part}\n\n... [continuing] ...\n\n{last_part}"
+            middle_part = document_text[middle_start : middle_start + int(MAX_TEXT_CHARS * 0.2)]
+            truncated_text = (
+                f"{first_part}\n\n... [middle section] ...\n\n{middle_part}\n\n... [continuing] ...\n\n{last_part}"
+            )
             print(f"⚠️ Large document truncated: {len(document_text)} → {len(truncated_text)} chars for analysis")
 
         truncated_vision = vision_analysis
@@ -618,16 +648,19 @@ Document:
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an expert strategy consultant who identifies specific recommendations and analyses in business plans that executives would challenge. Extract concrete, specific items that can be questioned. You must return only valid JSON."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are an expert strategy consultant who identifies specific recommendations and analyses in business plans that executives would challenge. Extract concrete, specific items that can be questioned. You must return only valid JSON.",
+                },
+                {"role": "user", "content": prompt},
             ],
             response_format={"type": "json_object"},
             temperature=0.7,
-            max_tokens=2000
+            max_tokens=2000,
         )
 
         result = json.loads(response.choices[0].message.content)
-        key_details = result.get('key_details', [])
+        key_details = result.get("key_details", [])
 
         print(f"\n{'='*80}")
         print(f"📊 DOCUMENT ANALYSIS RESULTS ({len(key_details)} items extracted)")
@@ -643,25 +676,28 @@ Document:
     except Exception as e:
         print(f"AI analysis error: {e}")
         import traceback
+
         traceback.print_exc()
         return generate_template_key_details(company_name, industry, report_type)
+
 
 def generate_template_key_details(company_name, industry, report_type):
     """Generate template key details when AI is unavailable - formatted as recommendations and analyses"""
     return [
         f"Recommendation: {company_name} proposes entering new market segments in {industry} - based on current capabilities",
-        f"Analysis: Target market sizing and opportunity assessment - projects significant growth potential",
-        f"Recommendation: Implement new pricing strategy to improve margins - competitive positioning approach",
-        f"Assumption: Customer adoption rate will reach 25% within 18 months - critical for revenue projections",
-        f"Analysis: Competitive landscape assessment - identifies key differentiators and gaps",
-        f"Recommendation: Invest in technology infrastructure upgrades - required for scaling operations",
-        f"Analysis: Financial projections show profitability in year 2 - assumes 30% annual growth",
-        f"Assumption: Market growth rate of 15% annually - underpins revenue forecasts",
-        f"Recommendation: Form strategic partnerships to accelerate market entry - reduces time to market",
-        f"Analysis: Resource requirements and operational costs - detailed breakdown of investments needed",
-        f"Assumption: Limited competitive response in first 12 months - window of opportunity",
-        f"Recommendation: Launch customer acquisition campaign targeting early adopters - phased rollout plan"
+        "Analysis: Target market sizing and opportunity assessment - projects significant growth potential",
+        "Recommendation: Implement new pricing strategy to improve margins - competitive positioning approach",
+        "Assumption: Customer adoption rate will reach 25% within 18 months - critical for revenue projections",
+        "Analysis: Competitive landscape assessment - identifies key differentiators and gaps",
+        "Recommendation: Invest in technology infrastructure upgrades - required for scaling operations",
+        "Analysis: Financial projections show profitability in year 2 - assumes 30% annual growth",
+        "Assumption: Market growth rate of 15% annually - underpins revenue forecasts",
+        "Recommendation: Form strategic partnerships to accelerate market entry - reduces time to market",
+        "Analysis: Resource requirements and operational costs - detailed breakdown of investments needed",
+        "Assumption: Limited competitive response in first 12 months - window of opportunity",
+        "Recommendation: Launch customer acquisition campaign targeting early adopters - phased rollout plan",
     ]
+
 
 # ========== NEW: Web Research ==========
 def research_company_online(company_name):
@@ -688,11 +724,14 @@ Provide factual, verifiable information. If you don't have current information, 
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a business research analyst providing factual company information."},
-                {"role": "user", "content": search_prompt}
+                {
+                    "role": "system",
+                    "content": "You are a business research analyst providing factual company information.",
+                },
+                {"role": "user", "content": search_prompt},
             ],
             temperature=0.5,
-            max_tokens=600
+            max_tokens=600,
         )
 
         research_summary = response.choices[0].message.content
@@ -703,7 +742,7 @@ Provide factual, verifiable information. If you don't have current information, 
         # Print first 800 characters with word boundary
         if len(research_summary) > 800:
             truncated = research_summary[:800]
-            last_space = truncated.rfind(' ')
+            last_space = truncated.rfind(" ")
             if last_space > 600:
                 truncated = truncated[:last_space]
             print(f"{truncated}...")
@@ -713,20 +752,29 @@ Provide factual, verifiable information. If you don't have current information, 
         print(f"{'='*80}\n")
 
         return {
-            'company_name': company_name,
-            'summary': research_summary,
-            'researched_at': datetime.now(CST).isoformat()
+            "company_name": company_name,
+            "summary": research_summary,
+            "researched_at": datetime.now(CST).isoformat(),
         }
 
     except Exception as e:
         print(f"❌ Web research error: {e}")
         return None
 
+
 # ========== Question Generation ==========
-def generate_ai_questions_with_topic_diversity(report_content, executive, company_name,
-                                               industry, report_type, all_key_details,
-                                               used_topics, question_number, company_research=None,
-                                               conversation_history=None):
+def generate_ai_questions_with_topic_diversity(
+    report_content,
+    executive,
+    company_name,
+    industry,
+    report_type,
+    all_key_details,
+    used_topics,
+    question_number,
+    company_research=None,
+    conversation_history=None,
+):
     """
     Generate AI questions ensuring topic diversity
     Now enhanced with company research context and conversation history
@@ -746,16 +794,17 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
     # Extract numbers from previous questions to avoid repetition
     if conversation_history and len(conversation_history) > 0:
         import re
+
         recent_numbers = set()
         for qa in conversation_history[-3:]:  # Check last 3 Q&As
             # Extract dollar amounts and percentages
-            numbers = re.findall(r'\$[\d,]+\.?\d*[MBK]?|\d+%', qa['question'])
+            numbers = re.findall(r"\$[\d,]+\.?\d*[MBK]?|\d+%", qa["question"])
             recent_numbers.update(numbers)
 
         # Prefer topics that don't contain the same numbers
         filtered_topics = []
         for topic in unused_topics:
-            topic_numbers = set(re.findall(r'\$[\d,]+\.?\d*[MBK]?|\d+%', topic))
+            topic_numbers = set(re.findall(r"\$[\d,]+\.?\d*[MBK]?|\d+%", topic))
             # If this topic doesn't share numbers with recent questions, it's preferred
             if not topic_numbers.intersection(recent_numbers):
                 filtered_topics.append(topic)
@@ -777,14 +826,14 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
 
     try:
         role_focus = {
-            'CEO': 'strategic vision, overall business direction, and long-term growth',
-            'CFO': 'financial viability, revenue models, costs, and profitability',
-            'CTO': 'technical feasibility, technology infrastructure, and innovation',
-            'CMO': 'market positioning, customer acquisition, and competitive differentiation',
-            'COO': 'operational efficiency, process optimization, and execution'
+            "CEO": "strategic vision, overall business direction, and long-term growth",
+            "CFO": "financial viability, revenue models, costs, and profitability",
+            "CTO": "technical feasibility, technology infrastructure, and innovation",
+            "CMO": "market positioning, customer acquisition, and competitive differentiation",
+            "COO": "operational efficiency, process optimization, and execution",
         }
 
-        focus = role_focus.get(executive, 'business strategy')
+        focus = role_focus.get(executive, "business strategy")
 
         # Add research context if available
         research_context = ""
@@ -803,37 +852,38 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
 
                 # Extract specific numbers and key terms from previous questions
                 import re
+
                 # Find dollar amounts like $532M, $455.5M
-                dollar_amounts = re.findall(r'\$[\d,]+\.?\d*[MBK]?', qa['question'])
+                dollar_amounts = re.findall(r"\$[\d,]+\.?\d*[MBK]?", qa["question"])
                 avoid_keywords.update(dollar_amounts)
 
                 # Find percentage values like 40%, 30%
-                percentages = re.findall(r'\d+%', qa['question'])
+                percentages = re.findall(r"\d+%", qa["question"])
                 avoid_keywords.update(percentages)
 
                 # Extract key phrases (2-4 word sequences)
-                words = qa['question'].lower().split()
+                words = qa["question"].lower().split()
                 for j in range(len(words) - 1):
-                    if len(words[j]) > 3 and len(words[j+1]) > 3:  # Skip short words
+                    if len(words[j]) > 3 and len(words[j + 1]) > 3:  # Skip short words
                         avoid_keywords.add(f"{words[j]} {words[j+1]}")
 
             # Extract topics already covered
             covered_topics = set()
             for qa in conversation_history:
                 # Enhanced keyword extraction from questions
-                q_lower = qa['question'].lower()
-                if 'market' in q_lower or 'customer' in q_lower:
-                    covered_topics.add('market/customer analysis')
-                if 'financial' in q_lower or 'revenue' in q_lower or 'profit' in q_lower or 'investment' in q_lower:
-                    covered_topics.add('financial projections')
-                if 'technology' in q_lower or 'technical' in q_lower or 'system' in q_lower:
-                    covered_topics.add('technical implementation')
-                if 'competitive' in q_lower or 'competitor' in q_lower:
-                    covered_topics.add('competitive strategy')
-                if 'operational' in q_lower or 'execution' in q_lower or 'implement' in q_lower:
-                    covered_topics.add('operational execution')
-                if 'risk' in q_lower or 'contingency' in q_lower:
-                    covered_topics.add('risk management')
+                q_lower = qa["question"].lower()
+                if "market" in q_lower or "customer" in q_lower:
+                    covered_topics.add("market/customer analysis")
+                if "financial" in q_lower or "revenue" in q_lower or "profit" in q_lower or "investment" in q_lower:
+                    covered_topics.add("financial projections")
+                if "technology" in q_lower or "technical" in q_lower or "system" in q_lower:
+                    covered_topics.add("technical implementation")
+                if "competitive" in q_lower or "competitor" in q_lower:
+                    covered_topics.add("competitive strategy")
+                if "operational" in q_lower or "execution" in q_lower or "implement" in q_lower:
+                    covered_topics.add("operational execution")
+                if "risk" in q_lower or "contingency" in q_lower:
+                    covered_topics.add("risk management")
 
             if covered_topics:
                 conversation_context += f"\n⚠️ Topics already discussed: {', '.join(covered_topics)}\n"
@@ -842,8 +892,12 @@ def generate_ai_questions_with_topic_diversity(report_content, executive, compan
             if avoid_keywords:
                 # Show specific numbers/phrases to avoid
                 sample_keywords = list(avoid_keywords)[:8]  # Show first 8 examples
-                conversation_context += f"\n⚠️ Avoid repeating these specific numbers/terms: {', '.join(sample_keywords)}\n"
-                conversation_context += "Find a DIFFERENT strategic recommendation or analysis that hasn't been discussed.\n"
+                conversation_context += (
+                    f"\n⚠️ Avoid repeating these specific numbers/terms: {', '.join(sample_keywords)}\n"
+                )
+                conversation_context += (
+                    "Find a DIFFERENT strategic recommendation or analysis that hasn't been discussed.\n"
+                )
 
         prompt = f"""You are the {executive} of a company evaluating this {report_type} from {company_name} in the {industry} industry.
 
@@ -889,11 +943,14 @@ Return ONLY the question text, no preamble or explanation."""
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": f"You are a tough, experienced {executive} evaluating a business plan. Your job is to identify weak spots, challenge assumptions, and push presenters to think deeper. Reference specific details from their proposal and ask pointed questions that expose gaps in their thinking. Use precise strategic management terminology: 'strategy' for overall direction, 'strategic initiatives' or 'actions' for specific programs."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": f"You are a tough, experienced {executive} evaluating a business plan. Your job is to identify weak spots, challenge assumptions, and push presenters to think deeper. Reference specific details from their proposal and ask pointed questions that expose gaps in their thinking. Use precise strategic management terminology: 'strategy' for overall direction, 'strategic initiatives' or 'actions' for specific programs.",
+                },
+                {"role": "user", "content": prompt},
             ],
             temperature=0.9,
-            max_tokens=200
+            max_tokens=200,
         )
 
         question = response.choices[0].message.content.strip()
@@ -908,6 +965,7 @@ Return ONLY the question text, no preamble or explanation."""
     except Exception as e:
         print(f"Question generation error: {e}")
         return generate_template_question(executive, question_number), topic_index
+
 
 # ========== NEW: Follow-up Question Generation ==========
 def should_ask_followup(response_text, original_question, executive, question_number):
@@ -948,19 +1006,22 @@ Only request a follow-up if the response is vague, incomplete, or raises new con
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an executive deciding if clarification is needed. You must return only valid JSON."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are an executive deciding if clarification is needed. You must return only valid JSON.",
+                },
+                {"role": "user", "content": prompt},
             ],
             response_format={"type": "json_object"},
             temperature=0.7,
-            max_tokens=200
+            max_tokens=200,
         )
 
         result = json.loads(response.choices[0].message.content)
 
-        if result.get('needs_followup') and result.get('followup_question'):
+        if result.get("needs_followup") and result.get("followup_question"):
             print(f"🔄 Follow-up warranted: {result.get('reason')}")
-            return True, result.get('followup_question')
+            return True, result.get("followup_question")
 
         return False, None
 
@@ -968,47 +1029,50 @@ Only request a follow-up if the response is vague, incomplete, or raises new con
         print(f"Follow-up analysis error: {e}")
         return False, None
 
+
 def generate_template_question(executive, question_number):
     """Generate template question when AI unavailable"""
     templates = {
-        'CEO': [
+        "CEO": [
             "How does this strategy align with our long-term vision?",
             "What are the key risks to this approach?",
-            "How will this create sustainable competitive advantage?"
+            "How will this create sustainable competitive advantage?",
         ],
-        'CFO': [
+        "CFO": [
             "What are the financial implications of this plan?",
             "How will this impact our profit margins?",
-            "What's the expected ROI timeline?"
+            "What's the expected ROI timeline?",
         ],
-        'CTO': [
+        "CTO": [
             "What technology infrastructure is required?",
             "How scalable is this technical solution?",
-            "What are the technical risks?"
+            "What are the technical risks?",
         ],
-        'CMO': [
+        "CMO": [
             "How will this resonate with our target market?",
             "What's our differentiation strategy?",
-            "How will we measure marketing effectiveness?"
+            "How will we measure marketing effectiveness?",
         ],
-        'COO': [
+        "COO": [
             "How will we execute this operationally?",
             "What resources are needed?",
-            "What are the operational challenges?"
-        ]
+            "What are the operational challenges?",
+        ],
     }
 
-    questions = templates.get(executive, templates['CEO'])
+    questions = templates.get(executive, templates["CEO"])
     return questions[(question_number - 1) % len(questions)]
+
 
 def generate_closing_message(company_name, report_type):
     """Generate closing message"""
     messages = [
         f"Thank you for presenting your {report_type} for {company_name}. Your responses demonstrate strategic thinking.",
         f"Excellent presentation of {company_name}'s strategy. You've addressed our key concerns well.",
-        f"Thank you for the comprehensive overview. Your {report_type} shows promise for {company_name}."
+        f"Thank you for the comprehensive overview. Your {report_type} shows promise for {company_name}.",
     ]
     return random.choice(messages)
+
 
 def generate_session_feedback(session_data, questions, responses):
     """Generate AI feedback on the student's performance during the executive panel session.
@@ -1021,10 +1085,12 @@ def generate_session_feedback(session_data, questions, responses):
     try:
         # Build the full conversation transcript for analysis
         conversation_text = ""
-        for i, (q, r) in enumerate(zip(questions, responses), 1):
-            followup_marker = " [Follow-up]" if q.get('is_followup') else ""
-            conversation_text += f"\nQ{i} ({q['executive_name']}, {q['executive']}){followup_marker}: {q['question_text']}\n"
-            response_marker = " [Audio Response]" if r['response_type'] == 'audio' else ""
+        for i, (q, r) in enumerate(zip(questions, responses, strict=False), 1):
+            followup_marker = " [Follow-up]" if q.get("is_followup") else ""
+            conversation_text += (
+                f"\nQ{i} ({q['executive_name']}, {q['executive']}){followup_marker}: {q['question_text']}\n"
+            )
+            response_marker = " [Audio Response]" if r["response_type"] == "audio" else ""
             conversation_text += f"A{i}{response_marker}: {r['response_text']}\n"
 
         # Scale feedback count based on conversation length
@@ -1036,7 +1102,7 @@ def generate_session_feedback(session_data, questions, responses):
         else:
             feedback_count = "3"
 
-        executives_list = ', '.join(session_data.get('selected_executives', []))
+        executives_list = ", ".join(session_data.get("selected_executives", []))
 
         prompt = f"""You are an expert executive communication coach at a top business school. A student just completed a simulated executive panel session where they presented a {session_data['report_type']} for {session_data['company_name']} in the {session_data['industry']} industry.
 
@@ -1071,35 +1137,42 @@ Return ONLY valid JSON, no other text."""
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an expert executive communication coach providing specific, actionable feedback on student performance during a simulated executive panel. You must return only valid JSON."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are an expert executive communication coach providing specific, actionable feedback on student performance during a simulated executive panel. You must return only valid JSON.",
+                },
+                {"role": "user", "content": prompt},
             ],
             response_format={"type": "json_object"},
             temperature=0.7,
-            max_tokens=1000
+            max_tokens=1000,
         )
 
         result = json.loads(response.choices[0].message.content)
 
         # Validate expected structure
-        if not isinstance(result.get('strengths'), list) or not isinstance(result.get('improvements'), list):
+        if not isinstance(result.get("strengths"), list) or not isinstance(result.get("improvements"), list):
             print("Warning: AI feedback missing expected arrays")
             return None
 
         # Validate each item has title and detail
-        for item in result['strengths'] + result['improvements']:
-            if 'title' not in item or 'detail' not in item:
+        for item in result["strengths"] + result["improvements"]:
+            if "title" not in item or "detail" not in item:
                 print("Warning: AI feedback item missing title or detail")
                 return None
 
-        print(f"✅ AI feedback generated: {len(result['strengths'])} strengths, {len(result['improvements'])} improvements")
+        print(
+            f"✅ AI feedback generated: {len(result['strengths'])} strengths, {len(result['improvements'])} improvements"
+        )
         return result
 
     except Exception as e:
         print(f"AI feedback generation error: {e}")
         import traceback
+
         traceback.print_exc()
         return None
+
 
 # ========== TTS and Audio ==========
 def generate_tts_audio(text, executive_name):
@@ -1109,39 +1182,37 @@ def generate_tts_audio(text, executive_name):
 
     try:
         voice_mapping = {
-            'Sarah Chen': 'nova',
-            'Michael Rodriguez': 'onyx',
-            'Dr. Lisa Kincaid': 'shimmer',
-            'James Thompson': 'fable',
-            'Rebecca Johnson': 'alloy'
+            "Sarah Chen": "nova",
+            "Michael Rodriguez": "onyx",
+            "Dr. Lisa Kincaid": "shimmer",
+            "James Thompson": "fable",
+            "Rebecca Johnson": "alloy",
         }
-        voice = voice_mapping.get(executive_name, 'alloy')
+        voice = voice_mapping.get(executive_name, "alloy")
 
         print(f"🎙️ Pre-generating TTS for {executive_name}")
 
         # Generate TTS (removed signal-based timeout as it conflicts with Gunicorn workers)
-        tts_response = openai_client.audio.speech.create(
-            model="tts-1",
-            voice=voice,
-            input=text[:500]
-        )
+        tts_response = openai_client.audio.speech.create(model="tts-1", voice=voice, input=text[:500])
 
-        audio_data = base64.b64encode(tts_response.content).decode('utf-8')
+        audio_data = base64.b64encode(tts_response.content).decode("utf-8")
         tts_url = f"data:audio/mpeg;base64,{audio_data}"
 
         print(f"✅ TTS pre-generated ({len(audio_data)} bytes)")
         return tts_url
 
     except TimeoutError:
-        print(f"⚠️ TTS timeout - skipping pre-generation")
+        print("⚠️ TTS timeout - skipping pre-generation")
         return None
     except Exception as e:
         print(f"⚠️ TTS pre-generation failed: {e}")
         return None
 
+
 def allowed_audio_file(filename):
     """Check if uploaded file is an allowed audio format"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_AUDIO_EXTENSIONS
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_AUDIO_EXTENSIONS
+
 
 def transcribe_audio_whisper(audio_file_path):
     """Transcribe audio using OpenAI Whisper API"""
@@ -1151,12 +1222,8 @@ def transcribe_audio_whisper(audio_file_path):
     try:
         print(f"🎤 Starting transcription of {audio_file_path}...")
 
-        with open(audio_file_path, 'rb') as audio_file:
-            transcription = openai_client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language="en"
-            )
+        with open(audio_file_path, "rb") as audio_file:
+            transcription = openai_client.audio.transcriptions.create(model="whisper-1", file=audio_file, language="en")
 
         print(f"✅ Transcription successful: {transcription.text[:100]}...")
         return transcription.text
@@ -1165,39 +1232,43 @@ def transcribe_audio_whisper(audio_file_path):
         print(f"❌ Transcription error: {e}")
         return f"[Transcription failed: {str(e)}]"
 
+
 # ========== ROUTES ==========
-@app.route('/')
+@app.route("/")
 def index():
     """Render main page"""
-    sid = get_session_id()
+    get_session_id()  # Ensure session is initialized
     # Don't clear session data - it's persistent in DB now
-    return render_template('index.html', ai_available=openai_available)
+    return render_template("index.html", ai_available=openai_available)
+
 
 # ============================================================================
 # PROGRESSIVE ANALYSIS ENDPOINTS (Option C)
 # ============================================================================
 
-@app.route('/upload_pdf', methods=['POST'])
+
+@app.route("/upload_pdf", methods=["POST"])
 def upload_pdf():
     """
     Step 1: Handle PDF upload and start extraction immediately
     Stores results in Flask session (persists across Gunicorn workers)
     """
     try:
-        if 'report' not in request.files:
-            return jsonify({'status': 'error', 'error': 'No file uploaded'})
+        if "report" not in request.files:
+            return jsonify({"status": "error", "error": "No file uploaded"})
 
-        file = request.files['report']
-        if file.filename == '':
-            return jsonify({'status': 'error', 'error': 'No file selected'})
+        file = request.files["report"]
+        if file.filename == "":
+            return jsonify({"status": "error", "error": "No file selected"})
 
-        if not file.filename.lower().endswith('.pdf'):
-            return jsonify({'status': 'error', 'error': 'Please upload a PDF file'})
+        if not file.filename.lower().endswith(".pdf"):
+            return jsonify({"status": "error", "error": "Please upload a PDF file"})
 
-        print(f"📄 Starting PDF extraction...")
+        print("📄 Starting PDF extraction...")
 
         # Generate unique temp filename for PDF
         import uuid
+
         temp_id = str(uuid.uuid4())[:8]
 
         # Save PDF temporarily
@@ -1211,29 +1282,33 @@ def upload_pdf():
             file.seek(0)  # Reset file pointer
             extraction_result = comprehensive_pdf_extraction(file, analyze_images_flag=True)
 
-            if not extraction_result or not extraction_result['combined_content']:
-                return jsonify({'status': 'error', 'error': 'Could not extract content from PDF'})
+            if not extraction_result or not extraction_result["combined_content"]:
+                return jsonify({"status": "error", "error": "Could not extract content from PDF"})
 
-            report_text = extraction_result['combined_content']
+            report_text = extraction_result["combined_content"]
 
             print(f"✅ Extraction complete: {len(report_text)} characters")
             print(f"   📊 Tables: {len(extraction_result['tables'])}, 🖼️ Images: {len(extraction_result['images'])}")
 
             # Cache extraction results (exclude raw image bytes - only metadata)
-            cache_extraction({
-                'combined_content': report_text,
-                'tables': extraction_result['tables'],
-                'image_count': len(extraction_result['images']),  # Just count, not bytes
-                'image_descriptions': extraction_result['image_descriptions']
-            })
+            cache_extraction(
+                {
+                    "combined_content": report_text,
+                    "tables": extraction_result["tables"],
+                    "image_count": len(extraction_result["images"]),  # Just count, not bytes
+                    "image_descriptions": extraction_result["image_descriptions"],
+                }
+            )
 
-            return jsonify({
-                'status': 'success',
-                'extraction_complete': True,
-                'char_count': len(report_text),
-                'table_count': len(extraction_result['tables']),
-                'image_count': len(extraction_result['images'])
-            })
+            return jsonify(
+                {
+                    "status": "success",
+                    "extraction_complete": True,
+                    "char_count": len(report_text),
+                    "table_count": len(extraction_result["tables"]),
+                    "image_count": len(extraction_result["images"]),
+                }
+            )
 
         finally:
             # Clean up temp PDF file
@@ -1243,11 +1318,12 @@ def upload_pdf():
     except Exception as e:
         print(f"Upload error: {e}")
         import traceback
+
         traceback.print_exc()
-        return jsonify({'status': 'error', 'error': f'Error processing file: {str(e)}'})
+        return jsonify({"status": "error", "error": f"Error processing file: {str(e)}"})
 
 
-@app.route('/analyze_content', methods=['POST'])
+@app.route("/analyze_content", methods=["POST"])
 def analyze_content():
     """
     Step 2: Perform AI analysis with company context
@@ -1255,42 +1331,37 @@ def analyze_content():
     """
     try:
         data = request.get_json()
-        company_name = data.get('company_name', 'Your Company')
-        industry = data.get('industry', 'Technology')
-        report_type = data.get('report_type', 'Business Plan')
+        company_name = data.get("company_name", "Your Company")
+        industry = data.get("industry", "Technology")
+        report_type = data.get("report_type", "Business Plan")
 
         # Get cached extraction from Flask session
         cached_data = get_cached_data()
-        if 'extraction' not in cached_data:
-            return jsonify({'status': 'error', 'error': 'Extraction data not found. Please re-upload PDF.'})
+        if "extraction" not in cached_data:
+            return jsonify({"status": "error", "error": "Extraction data not found. Please re-upload PDF."})
 
-        extraction = cached_data['extraction']
-        report_text = extraction['combined_content']
+        extraction = cached_data["extraction"]
+        report_text = extraction["combined_content"]
 
         print(f"🔍 Analyzing document for {company_name}...")
 
         # Analyze document to extract key strategic details
-        key_details = analyze_document_with_ai(
-            report_text, None, company_name, industry, report_type
-        )
+        key_details = analyze_document_with_ai(report_text, None, company_name, industry, report_type)
 
         # Cache AI analysis in Flask session
         cache_ai_analysis(key_details)
 
-        return jsonify({
-            'status': 'success',
-            'analysis_complete': True,
-            'key_details_count': len(key_details)
-        })
+        return jsonify({"status": "success", "analysis_complete": True, "key_details_count": len(key_details)})
 
     except Exception as e:
         print(f"Analysis error: {e}")
         import traceback
+
         traceback.print_exc()
-        return jsonify({'status': 'error', 'error': f'Error analyzing content: {str(e)}'})
+        return jsonify({"status": "error", "error": f"Error analyzing content: {str(e)}"})
 
 
-@app.route('/research_company', methods=['POST'])
+@app.route("/research_company", methods=["POST"])
 def research_company_endpoint():
     """
     Step 3: Optional web research for company background
@@ -1298,8 +1369,8 @@ def research_company_endpoint():
     """
     try:
         data = request.get_json()
-        company_name = data.get('company_name')
-        enable_web_research = data.get('enable_web_research', False)
+        company_name = data.get("company_name")
+        enable_web_research = data.get("enable_web_research", False)
 
         company_research = None
         if enable_web_research and company_name:
@@ -1307,20 +1378,19 @@ def research_company_endpoint():
             company_research = research_company_online(company_name)
             cache_web_research(company_research)
 
-        return jsonify({
-            'status': 'success',
-            'research_complete': True,
-            'research_enabled': company_research is not None
-        })
+        return jsonify(
+            {"status": "success", "research_complete": True, "research_enabled": company_research is not None}
+        )
 
     except Exception as e:
         print(f"Research error: {e}")
         import traceback
+
         traceback.print_exc()
-        return jsonify({'status': 'error', 'error': f'Error researching company: {str(e)}'})
+        return jsonify({"status": "error", "error": f"Error researching company: {str(e)}"})
 
 
-@app.route('/launch_panel', methods=['POST'])
+@app.route("/launch_panel", methods=["POST"])
 def launch_panel():
     """
     Step 4: Launch panel session with first question
@@ -1328,44 +1398,42 @@ def launch_panel():
     """
     try:
         data = request.get_json()
-        company_name = data.get('company_name', 'Your Company')
-        industry = data.get('industry', 'Technology')
-        report_type = data.get('report_type', 'Business Plan')
-        selected_executives = data.get('executives', [])
-        question_limit = int(data.get('question_limit', 10))
-        allow_followups = data.get('allow_followups', False)
-        enable_web_research = data.get('enable_web_research', False)
-        enable_ai_feedback = data.get('enable_ai_feedback', False)
+        company_name = data.get("company_name", "Your Company")
+        industry = data.get("industry", "Technology")
+        report_type = data.get("report_type", "Business Plan")
+        selected_executives = data.get("executives", [])
+        question_limit = int(data.get("question_limit", 10))
+        allow_followups = data.get("allow_followups", False)
+        enable_web_research = data.get("enable_web_research", False)
+        enable_ai_feedback = data.get("enable_ai_feedback", False)
 
         if not selected_executives:
-            return jsonify({'status': 'error', 'error': 'Please select at least one executive'})
+            return jsonify({"status": "error", "error": "Please select at least one executive"})
 
         # Get all cached data from Flask session
         cached_data = get_cached_data()
 
         # Check for extraction (required - can't proceed without it)
-        if 'extraction' not in cached_data:
-            print(f"❌ No extraction found in cache!")
+        if "extraction" not in cached_data:
+            print("❌ No extraction found in cache!")
             print(f"   Cache keys present: {list(cached_data.keys())}")
-            return jsonify({'status': 'error', 'error': 'Extraction data not found. Please restart wizard.'})
+            return jsonify({"status": "error", "error": "Extraction data not found. Please restart wizard."})
 
-        extraction = cached_data['extraction']
+        extraction = cached_data["extraction"]
 
         # If AI analysis is missing, run it now (handles race condition)
-        if 'ai_analysis' not in cached_data:
-            print(f"⚠️ AI analysis not in cache yet - running now...")
-            report_text = extraction['combined_content']
-            key_details = analyze_document_with_ai(
-                report_text, None, company_name, industry, report_type
-            )
+        if "ai_analysis" not in cached_data:
+            print("⚠️ AI analysis not in cache yet - running now...")
+            report_text = extraction["combined_content"]
+            key_details = analyze_document_with_ai(report_text, None, company_name, industry, report_type)
             cache_ai_analysis(key_details)
             print(f"✅ AI analysis completed on-demand: {len(key_details)} details")
         else:
-            key_details = cached_data['ai_analysis']
+            key_details = cached_data["ai_analysis"]
 
-        company_research = cached_data.get('web_research', None)
+        company_research = cached_data.get("web_research", None)
 
-        full_content = extraction['combined_content']
+        full_content = extraction["combined_content"]
 
         print(f"🚀 Launching panel session for {company_name}...")
         print(f"   Using cached extraction ({len(full_content)} chars) and analysis ({len(key_details)} details)")
@@ -1373,9 +1441,16 @@ def launch_panel():
         # Generate first question (fast - only ~3 seconds)
         first_executive = selected_executives[0]
         first_question, first_topic = generate_ai_questions_with_topic_diversity(
-            full_content, first_executive, company_name, industry, report_type,
-            key_details, [], 1, company_research,
-            conversation_history=[]  # First question, no history yet
+            full_content,
+            first_executive,
+            company_name,
+            industry,
+            report_type,
+            key_details,
+            [],
+            1,
+            company_research,
+            conversation_history=[],  # First question, no history yet
         )
 
         # Generate TTS for first question
@@ -1396,7 +1471,7 @@ def launch_panel():
             allow_followups=allow_followups,
             enable_web_research=enable_web_research,
             enable_ai_feedback=enable_ai_feedback,
-            company_research=company_research
+            company_research=company_research,
         )
 
         # Add first question to database
@@ -1405,7 +1480,7 @@ def launch_panel():
             executive=first_executive,
             executive_name=exec_name,
             question_text=first_question,
-            is_followup=False
+            is_followup=False,
         )
 
         # Update session with first topic used
@@ -1418,32 +1493,37 @@ def launch_panel():
         print(f"🎯 {first_executive} asking first question")
         print(f"💾 Session {sid} created in database")
 
-        return jsonify({
-            'status': 'success',
-            'first_question': {
-                'executive': first_executive,
-                'name': exec_name,
-                'title': first_executive,
-                'question': first_question,
-                'timestamp': datetime.now(CST).isoformat(),
-                'tts_url': first_tts_url,
-                'image': get_executive_image(first_executive)
-            },
-            'ai_mode': 'enabled' if openai_available else 'demo',
-            'research_enabled': enable_web_research and company_research is not None
-        })
+        return jsonify(
+            {
+                "status": "success",
+                "first_question": {
+                    "executive": first_executive,
+                    "name": exec_name,
+                    "title": first_executive,
+                    "question": first_question,
+                    "timestamp": datetime.now(CST).isoformat(),
+                    "tts_url": first_tts_url,
+                    "image": get_executive_image(first_executive),
+                },
+                "ai_mode": "enabled" if openai_available else "demo",
+                "research_enabled": enable_web_research and company_research is not None,
+            }
+        )
 
     except Exception as e:
         print(f"Launch error: {e}")
         import traceback
+
         traceback.print_exc()
-        return jsonify({'status': 'error', 'error': f'Error launching panel: {str(e)}'})
+        return jsonify({"status": "error", "error": f"Error launching panel: {str(e)}"})
+
 
 # ============================================================================
 # LEGACY ENDPOINT (Keep for backward compatibility)
 # ============================================================================
 
-@app.route('/upload_report', methods=['POST'])
+
+@app.route("/upload_report", methods=["POST"])
 def upload_report():
     """
     LEGACY: Handle PDF upload and analysis in one step
@@ -1451,31 +1531,33 @@ def upload_report():
     Now with Vision API support and optional web research
     """
     try:
-        if 'report' not in request.files:
-            return jsonify({'status': 'error', 'error': 'No file uploaded'})
+        if "report" not in request.files:
+            return jsonify({"status": "error", "error": "No file uploaded"})
 
-        file = request.files['report']
-        if file.filename == '':
-            return jsonify({'status': 'error', 'error': 'No file selected'})
+        file = request.files["report"]
+        if file.filename == "":
+            return jsonify({"status": "error", "error": "No file selected"})
 
-        if not file.filename.lower().endswith('.pdf'):
-            return jsonify({'status': 'error', 'error': 'Please upload a PDF file'})
+        if not file.filename.lower().endswith(".pdf"):
+            return jsonify({"status": "error", "error": "Please upload a PDF file"})
 
         # Get form data
-        company_name = request.form.get('company_name', 'Your Company')
-        industry = request.form.get('industry', 'Technology')
-        report_type = request.form.get('report_type', 'Business Plan')
-        selected_executives = request.form.getlist('executives[]')
-        question_limit = int(request.form.get('question_limit', 10))
-        allow_followups = request.form.get('allow_followups', 'false') == 'true'
-        enable_web_research = request.form.get('enable_web_research', 'false') == 'true'
-        enable_ai_feedback = request.form.get('enable_ai_feedback', 'false') == 'true'
+        company_name = request.form.get("company_name", "Your Company")
+        industry = request.form.get("industry", "Technology")
+        report_type = request.form.get("report_type", "Business Plan")
+        selected_executives = request.form.getlist("executives[]")
+        question_limit = int(request.form.get("question_limit", 10))
+        allow_followups = request.form.get("allow_followups", "false") == "true"
+        enable_web_research = request.form.get("enable_web_research", "false") == "true"
+        enable_ai_feedback = request.form.get("enable_ai_feedback", "false") == "true"
 
         if not selected_executives:
-            return jsonify({'status': 'error', 'error': 'Please select at least one executive'})
+            return jsonify({"status": "error", "error": "Please select at least one executive"})
 
         print(f"📄 Processing PDF for {company_name}...")
-        print(f"   Settings: followups={allow_followups}, research={enable_web_research}, feedback={enable_ai_feedback}")
+        print(
+            f"   Settings: followups={allow_followups}, research={enable_web_research}, feedback={enable_ai_feedback}"
+        )
 
         # Save PDF temporarily for Vision API
         filename = secure_filename(file.filename)
@@ -1487,14 +1569,16 @@ def upload_report():
             file.seek(0)  # Reset file pointer
             extraction_result = comprehensive_pdf_extraction(file, analyze_images_flag=True)
 
-            if not extraction_result or not extraction_result['combined_content']:
-                return jsonify({'status': 'error', 'error': 'Could not extract content from PDF'})
+            if not extraction_result or not extraction_result["combined_content"]:
+                return jsonify({"status": "error", "error": "Could not extract content from PDF"})
 
             # Get the enriched combined content (includes text, tables, and embedded image analysis)
-            report_text = extraction_result['combined_content']
+            report_text = extraction_result["combined_content"]
 
             print(f"✅ Comprehensive extraction complete: {len(report_text)} characters")
-            print(f"   📊 Tables: {len(extraction_result['tables'])}, 🖼️ Images: {len(extraction_result['images'])} (analyzed: {len(extraction_result['image_descriptions'])})")
+            print(
+                f"   📊 Tables: {len(extraction_result['tables'])}, 🖼️ Images: {len(extraction_result['images'])} (analyzed: {len(extraction_result['image_descriptions'])})"
+            )
 
             # OPTIONAL: Full-page Vision analysis (DISABLED - redundant with embedded image analysis)
             # Embedded image analysis already captures visual content from charts/graphs
@@ -1513,16 +1597,21 @@ def upload_report():
                 company_research = research_company_online(company_name)
 
             # Analyze document to extract key details
-            key_details = analyze_document_with_ai(
-                report_text, vision_analysis, company_name, industry, report_type
-            )
+            key_details = analyze_document_with_ai(report_text, vision_analysis, company_name, industry, report_type)
 
             # Generate first question
             first_executive = selected_executives[0]
             first_question, first_topic = generate_ai_questions_with_topic_diversity(
-                full_content, first_executive, company_name, industry, report_type,
-                key_details, [], 1, company_research,
-                conversation_history=[]  # First question, no history yet
+                full_content,
+                first_executive,
+                company_name,
+                industry,
+                report_type,
+                key_details,
+                [],
+                1,
+                company_research,
+                conversation_history=[],  # First question, no history yet
             )
 
             # Generate TTS for first question
@@ -1543,7 +1632,7 @@ def upload_report():
                 allow_followups=allow_followups,
                 enable_web_research=enable_web_research,
                 enable_ai_feedback=enable_ai_feedback,
-                company_research=company_research
+                company_research=company_research,
             )
 
             # Add first question to database
@@ -1552,7 +1641,7 @@ def upload_report():
                 executive=first_executive,
                 executive_name=exec_name,
                 question_text=first_question,
-                is_followup=False
+                is_followup=False,
             )
 
             # Update session with first topic used
@@ -1561,20 +1650,22 @@ def upload_report():
             print(f"🎯 {first_executive} asking first question")
             print(f"💾 Session {sid} created in database")
 
-            return jsonify({
-                'status': 'success',
-                'first_question': {
-                    'executive': first_executive,
-                    'name': exec_name,
-                    'title': first_executive,
-                    'question': first_question,
-                    'timestamp': datetime.now(CST).isoformat(),
-                    'tts_url': first_tts_url,
-                    'image': get_executive_image(first_executive)  # NEW: Add headshot
-                },
-                'ai_mode': 'enabled' if openai_available else 'demo',
-                'research_enabled': enable_web_research and company_research is not None
-            })
+            return jsonify(
+                {
+                    "status": "success",
+                    "first_question": {
+                        "executive": first_executive,
+                        "name": exec_name,
+                        "title": first_executive,
+                        "question": first_question,
+                        "timestamp": datetime.now(CST).isoformat(),
+                        "tts_url": first_tts_url,
+                        "image": get_executive_image(first_executive),  # NEW: Add headshot
+                    },
+                    "ai_mode": "enabled" if openai_available else "demo",
+                    "research_enabled": enable_web_research and company_research is not None,
+                }
+            )
 
         finally:
             # Clean up temp PDF file
@@ -1584,10 +1675,12 @@ def upload_report():
     except Exception as e:
         print(f"Upload error: {e}")
         import traceback
-        traceback.print_exc()
-        return jsonify({'status': 'error', 'error': f'Error processing file: {str(e)}'})
 
-@app.route('/respond_to_executive', methods=['POST'])
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": f"Error processing file: {str(e)}"})
+
+
+@app.route("/respond_to_executive", methods=["POST"])
 def respond_to_executive():
     """
     Handle student text response
@@ -1596,26 +1689,26 @@ def respond_to_executive():
     try:
         # Get response data
         data = request.get_json()
-        response_text = data.get('response', '').strip()
+        response_text = data.get("response", "").strip()
 
         if not response_text:
-            return jsonify({'status': 'error', 'error': 'Please provide a response'})
+            return jsonify({"status": "error", "error": "Please provide a response"})
 
         # Get session data from database
         sid = get_session_id()
         session_data = db.get_session(sid)
 
         if not session_data:
-            return jsonify({'status': 'error', 'error': 'Session data lost. Please restart.'})
+            return jsonify({"status": "error", "error": "Session data lost. Please restart."})
 
         # Store the response
-        db.add_response(sid, response_text, 'text')
+        db.add_response(sid, response_text, "text")
         print(f"📊 Stored text response for session {sid}")
 
         # Get current state
-        current_count = session_data['current_question_count']
-        question_limit = session_data['question_limit']
-        allow_followups = session_data['allow_followups']
+        current_count = session_data["current_question_count"]
+        question_limit = session_data["question_limit"]
+        allow_followups = session_data["allow_followups"]
 
         # Get the last question asked
         questions = db.get_questions(sid)
@@ -1625,18 +1718,15 @@ def respond_to_executive():
         followup_needed = False
         followup_question = None
 
-        if allow_followups and last_question and not last_question['is_followup']:
+        if allow_followups and last_question and not last_question["is_followup"]:
             followup_needed, followup_question = should_ask_followup(
-                response_text,
-                last_question['question_text'],
-                last_question['executive'],
-                current_count
+                response_text, last_question["question_text"], last_question["executive"], current_count
             )
 
         # If follow-up is needed, ask it
         if followup_needed and followup_question:
-            exec_name = last_question['executive_name']
-            exec_role = last_question['executive']
+            exec_name = last_question["executive_name"]
+            exec_role = last_question["executive"]
 
             # Add follow-up question to database
             db.add_question(
@@ -1644,7 +1734,7 @@ def respond_to_executive():
                 executive=exec_role,
                 executive_name=exec_name,
                 question_text=followup_question,
-                is_followup=True
+                is_followup=True,
             )
 
             # Generate TTS for follow-up
@@ -1652,20 +1742,22 @@ def respond_to_executive():
 
             print(f"🔄 {exec_role} asking follow-up question")
 
-            return jsonify({
-                'status': 'success',
-                'follow_up': {
-                    'executive': exec_role,
-                    'name': exec_name,
-                    'title': exec_role,
-                    'question': followup_question,
-                    'timestamp': datetime.now(CST).isoformat(),
-                    'tts_url': tts_url,
-                    'image': get_executive_image(exec_role),
-                    'is_followup': True
-                },
-                'session_ending': False
-            })
+            return jsonify(
+                {
+                    "status": "success",
+                    "follow_up": {
+                        "executive": exec_role,
+                        "name": exec_name,
+                        "title": exec_role,
+                        "question": followup_question,
+                        "timestamp": datetime.now(CST).isoformat(),
+                        "tts_url": tts_url,
+                        "image": get_executive_image(exec_role),
+                        "is_followup": True,
+                    },
+                    "session_ending": False,
+                }
+            )
 
         # Otherwise, proceed to next question
         next_count = current_count + 1
@@ -1674,50 +1766,52 @@ def respond_to_executive():
         if next_count > question_limit:
             print(f"✅ Session complete ({current_count}/{question_limit})")
 
-            company_name = session_data['company_name']
-            report_type = session_data['report_type']
+            company_name = session_data["company_name"]
+            report_type = session_data["report_type"]
             closing_message = generate_closing_message(company_name, report_type)
 
             tts_url = generate_tts_audio(closing_message, "Sarah Chen")
 
             db.update_session(sid, current_question_count=next_count)
 
-            return jsonify({
-                'status': 'success',
-                'follow_up': {
-                    'executive': 'CEO',
-                    'name': get_executive_name('CEO'),
-                    'title': 'CEO',
-                    'question': closing_message,
-                    'timestamp': datetime.now(CST).isoformat(),
-                    'is_closing': True,
-                    'tts_url': tts_url,
-                    'image': get_executive_image('CEO')
-                },
-                'session_ending': True
-            })
+            return jsonify(
+                {
+                    "status": "success",
+                    "follow_up": {
+                        "executive": "CEO",
+                        "name": get_executive_name("CEO"),
+                        "title": "CEO",
+                        "question": closing_message,
+                        "timestamp": datetime.now(CST).isoformat(),
+                        "is_closing": True,
+                        "tts_url": tts_url,
+                        "image": get_executive_image("CEO"),
+                    },
+                    "session_ending": True,
+                }
+            )
 
         # Generate next question
-        selected_executives = session_data['selected_executives']
+        selected_executives = session_data["selected_executives"]
         next_exec = get_next_executive(selected_executives, next_count)
-        key_details = session_data['key_details']
-        used_topics = session_data['used_topics']
-        company_research = session_data.get('company_research')
+        key_details = session_data["key_details"]
+        used_topics = session_data["used_topics"]
+        company_research = session_data.get("company_research")
 
         # Get conversation history for context
         conversation_history = db.get_conversation_history(sid, limit=5)
 
         next_question, next_topic = generate_ai_questions_with_topic_diversity(
-            session_data['report_content'],
+            session_data["report_content"],
             next_exec,
-            session_data['company_name'],
-            session_data['industry'],
-            session_data['report_type'],
+            session_data["company_name"],
+            session_data["industry"],
+            session_data["report_type"],
             key_details,
             used_topics,
             next_count,
             company_research,
-            conversation_history=conversation_history
+            conversation_history=conversation_history,
         )
 
         exec_name = get_executive_name(next_exec)
@@ -1729,7 +1823,7 @@ def respond_to_executive():
             executive=next_exec,
             executive_name=exec_name,
             question_text=next_question,
-            is_followup=False
+            is_followup=False,
         )
 
         # Update session
@@ -1738,39 +1832,43 @@ def respond_to_executive():
 
         print(f"🎯 {next_exec} asking question #{next_count}")
 
-        return jsonify({
-            'status': 'success',
-            'follow_up': {
-                'executive': next_exec,
-                'name': exec_name,
-                'title': next_exec,
-                'question': next_question,
-                'timestamp': datetime.now(CST).isoformat(),
-                'tts_url': tts_url,
-                'image': get_executive_image(next_exec)
+        return jsonify(
+            {
+                "status": "success",
+                "follow_up": {
+                    "executive": next_exec,
+                    "name": exec_name,
+                    "title": next_exec,
+                    "question": next_question,
+                    "timestamp": datetime.now(CST).isoformat(),
+                    "tts_url": tts_url,
+                    "image": get_executive_image(next_exec),
+                },
             }
-        })
+        )
 
     except Exception as e:
         print(f"Response error: {e}")
         import traceback
-        traceback.print_exc()
-        return jsonify({'status': 'error', 'error': f'Error processing response: {str(e)}'})
 
-@app.route('/respond_to_executive_audio', methods=['POST'])
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": f"Error processing response: {str(e)}"})
+
+
+@app.route("/respond_to_executive_audio", methods=["POST"])
 def respond_to_executive_audio():
     """Handle audio response with transcription"""
     try:
-        if 'audio' not in request.files:
-            return jsonify({'status': 'error', 'error': 'No audio file provided'})
+        if "audio" not in request.files:
+            return jsonify({"status": "error", "error": "No audio file provided"})
 
-        audio_file = request.files['audio']
+        audio_file = request.files["audio"]
 
-        if audio_file.filename == '':
-            return jsonify({'status': 'error', 'error': 'No file selected'})
+        if audio_file.filename == "":
+            return jsonify({"status": "error", "error": "No file selected"})
 
         if not allowed_audio_file(audio_file.filename):
-            return jsonify({'status': 'error', 'error': 'Invalid audio file format'})
+            return jsonify({"status": "error", "error": "Invalid audio file format"})
 
         # Save audio temporarily
         filename = secure_filename(f"response_{datetime.now().strftime('%Y%m%d_%H%M%S')}.webm")
@@ -1781,24 +1879,24 @@ def respond_to_executive_audio():
             # Transcribe audio
             transcription = transcribe_audio_whisper(filepath)
 
-            if not transcription or transcription.startswith('['):
-                return jsonify({'status': 'error', 'error': 'Failed to transcribe audio'})
+            if not transcription or transcription.startswith("["):
+                return jsonify({"status": "error", "error": "Failed to transcribe audio"})
 
             # Get session data
             sid = get_session_id()
             session_data = db.get_session(sid)
 
             if not session_data:
-                return jsonify({'status': 'error', 'error': 'Session data lost. Please restart.'})
+                return jsonify({"status": "error", "error": "Session data lost. Please restart."})
 
             # Store the response
-            db.add_response(sid, transcription, 'audio')
+            db.add_response(sid, transcription, "audio")
             print(f"📊 Stored audio response for session {sid}")
 
             # Get current state
-            current_count = session_data['current_question_count']
-            question_limit = session_data['question_limit']
-            allow_followups = session_data['allow_followups']
+            current_count = session_data["current_question_count"]
+            question_limit = session_data["question_limit"]
+            allow_followups = session_data["allow_followups"]
 
             # Get the last question asked
             questions = db.get_questions(sid)
@@ -1808,95 +1906,96 @@ def respond_to_executive_audio():
             followup_needed = False
             followup_question = None
 
-            if allow_followups and last_question and not last_question['is_followup']:
+            if allow_followups and last_question and not last_question["is_followup"]:
                 followup_needed, followup_question = should_ask_followup(
-                    transcription,
-                    last_question['question_text'],
-                    last_question['executive'],
-                    current_count
+                    transcription, last_question["question_text"], last_question["executive"], current_count
                 )
 
             # If follow-up is needed, ask it
             if followup_needed and followup_question:
-                exec_name = last_question['executive_name']
-                exec_role = last_question['executive']
+                exec_name = last_question["executive_name"]
+                exec_role = last_question["executive"]
 
                 db.add_question(
                     session_id=sid,
                     executive=exec_role,
                     executive_name=exec_name,
                     question_text=followup_question,
-                    is_followup=True
+                    is_followup=True,
                 )
 
                 tts_url = generate_tts_audio(followup_question, exec_name)
 
                 print(f"🔄 {exec_role} asking follow-up question")
 
-                return jsonify({
-                    'status': 'success',
-                    'transcription': transcription,
-                    'follow_up': {
-                        'executive': exec_role,
-                        'name': exec_name,
-                        'title': exec_role,
-                        'question': followup_question,
-                        'timestamp': datetime.now(CST).isoformat(),
-                        'tts_url': tts_url,
-                        'image': get_executive_image(exec_role),
-                        'is_followup': True
-                    },
-                    'session_ending': False
-                })
+                return jsonify(
+                    {
+                        "status": "success",
+                        "transcription": transcription,
+                        "follow_up": {
+                            "executive": exec_role,
+                            "name": exec_name,
+                            "title": exec_role,
+                            "question": followup_question,
+                            "timestamp": datetime.now(CST).isoformat(),
+                            "tts_url": tts_url,
+                            "image": get_executive_image(exec_role),
+                            "is_followup": True,
+                        },
+                        "session_ending": False,
+                    }
+                )
 
             # Otherwise, proceed to next question or end session
             next_count = current_count + 1
 
             if next_count > question_limit:
-                company_name = session_data['company_name']
-                report_type = session_data['report_type']
+                company_name = session_data["company_name"]
+                report_type = session_data["report_type"]
                 closing_message = generate_closing_message(company_name, report_type)
 
                 tts_url = generate_tts_audio(closing_message, "Sarah Chen")
                 db.update_session(sid, current_question_count=next_count)
 
-                return jsonify({
-                    'status': 'success',
-                    'transcription': transcription,
-                    'follow_up': {
-                        'executive': 'CEO',
-                        'name': get_executive_name('CEO'),
-                        'title': 'CEO',
-                        'question': closing_message,
-                        'timestamp': datetime.now(CST).isoformat(),
-                        'is_closing': True,
-                        'tts_url': tts_url,
-                        'image': get_executive_image('CEO')
-                    },
-                    'session_ending': True
-                })
+                return jsonify(
+                    {
+                        "status": "success",
+                        "transcription": transcription,
+                        "follow_up": {
+                            "executive": "CEO",
+                            "name": get_executive_name("CEO"),
+                            "title": "CEO",
+                            "question": closing_message,
+                            "timestamp": datetime.now(CST).isoformat(),
+                            "is_closing": True,
+                            "tts_url": tts_url,
+                            "image": get_executive_image("CEO"),
+                        },
+                        "session_ending": True,
+                    }
+                )
 
             # Generate next question
-            selected_executives = session_data['selected_executives']
+            selected_executives = session_data["selected_executives"]
             next_exec = get_next_executive(selected_executives, next_count)
-            key_details = session_data['key_details']
-            used_topics = session_data['used_topics']
-            company_research = session_data.get('company_research')
+            key_details = session_data["key_details"]
+            used_topics = session_data["used_topics"]
+            company_research = session_data.get("company_research")
 
             # Get conversation history for context
             conversation_history = db.get_conversation_history(sid, limit=5)
 
             next_question, next_topic = generate_ai_questions_with_topic_diversity(
-                session_data['report_content'],
+                session_data["report_content"],
                 next_exec,
-                session_data['company_name'],
-                session_data['industry'],
-                session_data['report_type'],
+                session_data["company_name"],
+                session_data["industry"],
+                session_data["report_type"],
                 key_details,
                 used_topics,
                 next_count,
                 company_research,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
             )
 
             exec_name = get_executive_name(next_exec)
@@ -1907,7 +2006,7 @@ def respond_to_executive_audio():
                 executive=next_exec,
                 executive_name=exec_name,
                 question_text=next_question,
-                is_followup=False
+                is_followup=False,
             )
 
             used_topics.append(next_topic)
@@ -1915,19 +2014,21 @@ def respond_to_executive_audio():
 
             print(f"🎯 {next_exec} asking question #{next_count}")
 
-            return jsonify({
-                'status': 'success',
-                'transcription': transcription,
-                'follow_up': {
-                    'executive': next_exec,
-                    'name': exec_name,
-                    'title': next_exec,
-                    'question': next_question,
-                    'timestamp': datetime.now(CST).isoformat(),
-                    'tts_url': tts_url,
-                    'image': get_executive_image(next_exec)
+            return jsonify(
+                {
+                    "status": "success",
+                    "transcription": transcription,
+                    "follow_up": {
+                        "executive": next_exec,
+                        "name": exec_name,
+                        "title": next_exec,
+                        "question": next_question,
+                        "timestamp": datetime.now(CST).isoformat(),
+                        "tts_url": tts_url,
+                        "image": get_executive_image(next_exec),
+                    },
                 }
-            })
+            )
 
         finally:
             # Clean up temp file
@@ -1937,55 +2038,51 @@ def respond_to_executive_audio():
     except Exception as e:
         print(f"Audio response error: {e}")
         import traceback
+
         traceback.print_exc()
 
-        if 'filepath' in locals() and os.path.exists(filepath):
+        if "filepath" in locals() and os.path.exists(filepath):
             os.remove(filepath)
 
-        return jsonify({'status': 'error', 'error': f'Error processing audio: {str(e)}'})
+        return jsonify({"status": "error", "error": f"Error processing audio: {str(e)}"})
 
-@app.route('/generate_tts', methods=['POST'])
+
+@app.route("/generate_tts", methods=["POST"])
 def generate_tts():
     """Generate text-to-speech audio for executive questions"""
     try:
         data = request.get_json()
-        text = data.get('text', '')
-        voice = data.get('voice', 'alloy')
+        text = data.get("text", "")
+        voice = data.get("voice", "alloy")
 
         if not text:
-            return jsonify({'status': 'error', 'error': 'No text provided'})
+            return jsonify({"status": "error", "error": "No text provided"})
 
         if not openai_available or not openai_client:
-            return jsonify({'status': 'error', 'error': 'TTS not available'})
+            return jsonify({"status": "error", "error": "TTS not available"})
 
         print(f"🎙️ Generating TTS with voice: {voice}")
 
-        response = openai_client.audio.speech.create(
-            model="tts-1",
-            voice=voice,
-            input=text,
-            speed=1.0
-        )
+        response = openai_client.audio.speech.create(model="tts-1", voice=voice, input=text, speed=1.0)
 
         audio_content = response.content
         print(f"✅ Generated {len(audio_content)} bytes of audio")
 
         return Response(
             audio_content,
-            mimetype='audio/mpeg',
-            headers={
-                'Content-Disposition': 'inline; filename=question.mp3',
-                'Cache-Control': 'no-cache'
-            }
+            mimetype="audio/mpeg",
+            headers={"Content-Disposition": "inline; filename=question.mp3", "Cache-Control": "no-cache"},
         )
 
     except Exception as e:
         print(f"❌ TTS Error: {e}")
         import traceback
-        traceback.print_exc()
-        return jsonify({'status': 'error', 'error': str(e)}), 500
 
-@app.route('/end_session', methods=['POST'])
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/end_session", methods=["POST"])
 def end_session():
     """End session and return summary data"""
     try:
@@ -1993,63 +2090,63 @@ def end_session():
         session_data = db.get_session(sid)
 
         if not session_data:
-            return jsonify({'status': 'error', 'error': 'No session data'})
+            return jsonify({"status": "error", "error": "No session data"})
 
         questions = db.get_questions(sid)
         responses = db.get_responses(sid)
 
         # Count audio vs text responses
-        audio_count = sum(1 for r in responses if r['response_type'] == 'audio')
+        audio_count = sum(1 for r in responses if r["response_type"] == "audio")
         text_count = len(responses) - audio_count
 
         # Get unique executives
         executives_involved = []
         for q in questions:
-            exec_name = q['executive_name']
+            exec_name = q["executive_name"]
             if exec_name not in executives_involved:
                 executives_involved.append(exec_name)
 
         summary = {
-            'company_name': session_data['company_name'],
-            'presentation_topic': session_data['report_type'],
-            'session_type': 'questions',
-            'session_limit': session_data['question_limit'],
-            'total_questions': len(questions),
-            'total_responses': len(responses),
-            'audio_responses': audio_count,
-            'text_responses': text_count,
-            'executives_involved': executives_involved
+            "company_name": session_data["company_name"],
+            "presentation_topic": session_data["report_type"],
+            "session_type": "questions",
+            "session_limit": session_data["question_limit"],
+            "total_questions": len(questions),
+            "total_responses": len(responses),
+            "audio_responses": audio_count,
+            "text_responses": text_count,
+            "executives_involved": executives_involved,
         }
 
         # Generate AI feedback if opted in
-        if session_data.get('enable_ai_feedback') and questions and responses:
+        if session_data.get("enable_ai_feedback") and questions and responses:
             ai_feedback = generate_session_feedback(session_data, questions, responses)
             if ai_feedback:
                 db.update_session(sid, ai_feedback=json.dumps(ai_feedback))
-                summary['ai_feedback'] = ai_feedback
+                summary["ai_feedback"] = ai_feedback
 
-        return jsonify({
-            'status': 'success',
-            'summary': summary
-        })
+        return jsonify({"status": "success", "summary": summary})
 
     except Exception as e:
         print(f"End session error: {e}")
         import traceback
-        traceback.print_exc()
-        return jsonify({'status': 'error', 'error': str(e)})
 
-@app.route('/download_transcript', methods=['GET'])
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)})
+
+
+@app.route("/download_transcript", methods=["GET"])
 def download_transcript():
     """Generate and download session transcript as PDF"""
     try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-        from reportlab.lib.enums import TA_CENTER
         from io import BytesIO
+
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import inch
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
         sid = get_session_id()
         session_data = db.get_session(sid)
@@ -2065,10 +2162,10 @@ def download_transcript():
         doc = SimpleDocTemplate(
             buffer,
             pagesize=letter,
-            rightMargin=0.75*inch,
-            leftMargin=0.75*inch,
-            topMargin=0.75*inch,
-            bottomMargin=0.75*inch
+            rightMargin=0.75 * inch,
+            leftMargin=0.75 * inch,
+            topMargin=0.75 * inch,
+            bottomMargin=0.75 * inch,
         )
 
         story = []
@@ -2076,158 +2173,153 @@ def download_transcript():
 
         # Custom styles
         title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
+            "CustomTitle",
+            parent=styles["Heading1"],
             fontSize=24,
-            textColor=colors.HexColor('#BF5700'),
+            textColor=colors.HexColor("#BF5700"),
             spaceAfter=30,
-            alignment=TA_CENTER
+            alignment=TA_CENTER,
         )
 
         header_style = ParagraphStyle(
-            'CustomHeader',
-            parent=styles['Heading2'],
+            "CustomHeader",
+            parent=styles["Heading2"],
             fontSize=14,
-            textColor=colors.HexColor('#333F48'),
+            textColor=colors.HexColor("#333F48"),
             spaceAfter=12,
-            spaceBefore=12
+            spaceBefore=12,
         )
 
         exec_style = ParagraphStyle(
-            'Executive',
-            parent=styles['Normal'],
+            "Executive",
+            parent=styles["Normal"],
             fontSize=11,
-            textColor=colors.HexColor('#BF5700'),
-            fontName='Helvetica-Bold',
-            spaceAfter=6
+            textColor=colors.HexColor("#BF5700"),
+            fontName="Helvetica-Bold",
+            spaceAfter=6,
         )
 
         timestamp_style = ParagraphStyle(
-            'Timestamp',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.grey,
-            spaceAfter=4
+            "Timestamp", parent=styles["Normal"], fontSize=9, textColor=colors.grey, spaceAfter=4
         )
 
-        question_style = ParagraphStyle(
-            'Question',
-            parent=styles['Normal'],
-            fontSize=10,
-            leftIndent=20,
-            spaceAfter=8
-        )
+        question_style = ParagraphStyle("Question", parent=styles["Normal"], fontSize=10, leftIndent=20, spaceAfter=8)
 
         response_style = ParagraphStyle(
-            'Response',
-            parent=styles['Normal'],
+            "Response",
+            parent=styles["Normal"],
             fontSize=10,
             leftIndent=40,
             spaceAfter=12,
-            textColor=colors.HexColor('#333333')
+            textColor=colors.HexColor("#333333"),
         )
 
         # Title
         story.append(Paragraph("Executive Panel Session Transcript", title_style))
-        story.append(Spacer(1, 0.2*inch))
+        story.append(Spacer(1, 0.2 * inch))
 
         # Session Details
         session_data_table = [
-            ['Company:', session_data['company_name']],
-            ['Industry:', session_data['industry']],
-            ['Report Type:', session_data['report_type']],
-            ['Session Date:', datetime.now().strftime('%B %d, %Y')],
-            ['Questions:', str(len(questions))]
+            ["Company:", session_data["company_name"]],
+            ["Industry:", session_data["industry"]],
+            ["Report Type:", session_data["report_type"]],
+            ["Session Date:", datetime.now().strftime("%B %d, %Y")],
+            ["Questions:", str(len(questions))],
         ]
 
-        t = Table(session_data_table, colWidths=[2*inch, 4*inch])
-        t.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#333F48')),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ]))
+        t = Table(session_data_table, colWidths=[2 * inch, 4 * inch])
+        t.setStyle(
+            TableStyle(
+                [
+                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 10),
+                    ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#333F48")),
+                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
         story.append(t)
-        story.append(Spacer(1, 0.3*inch))
+        story.append(Spacer(1, 0.3 * inch))
 
         # Conversation
         story.append(Paragraph("Conversation Transcript", header_style))
-        story.append(Spacer(1, 0.1*inch))
+        story.append(Spacer(1, 0.1 * inch))
 
-        for i, (question, response) in enumerate(zip(questions, responses), 1):
+        for question, response in zip(questions, responses, strict=False):
             # Question
-            story.append(Paragraph(
-                f"<b>{question['executive_name']}</b> ({question['executive']})",
-                exec_style
-            ))
+            story.append(Paragraph(f"<b>{question['executive_name']}</b> ({question['executive']})", exec_style))
 
-            if question.get('timestamp'):
+            if question.get("timestamp"):
                 try:
-                    dt = datetime.fromisoformat(question['timestamp'].replace('Z', '+00:00'))
-                    formatted_time = dt.strftime('%I:%M:%S %p')
+                    dt = datetime.fromisoformat(question["timestamp"].replace("Z", "+00:00"))
+                    formatted_time = dt.strftime("%I:%M:%S %p")
                     story.append(Paragraph(f"<i>{formatted_time}</i>", timestamp_style))
-                except:
+                except Exception:
                     pass
 
-            followup_marker = " [Follow-up]" if question.get('is_followup') else ""
+            followup_marker = " [Follow-up]" if question.get("is_followup") else ""
             story.append(Paragraph(f"Q{followup_marker}: {question['question_text']}", question_style))
 
             # Response
-            if response.get('timestamp'):
+            if response.get("timestamp"):
                 try:
-                    dt = datetime.fromisoformat(response['timestamp'].replace('Z', '+00:00'))
-                    formatted_time = dt.strftime('%I:%M:%S %p')
+                    dt = datetime.fromisoformat(response["timestamp"].replace("Z", "+00:00"))
+                    formatted_time = dt.strftime("%I:%M:%S %p")
                     story.append(Paragraph(f"<i>{formatted_time}</i>", timestamp_style))
-                except:
+                except Exception:
                     pass
 
-            response_marker = " [Audio Response]" if response['response_type'] == 'audio' else ""
+            response_marker = " [Audio Response]" if response["response_type"] == "audio" else ""
             story.append(Paragraph(f"A{response_marker}: {response['response_text']}", response_style))
-            story.append(Spacer(1, 0.1*inch))
+            story.append(Spacer(1, 0.1 * inch))
 
         # AI Feedback section (if available)
-        if session_data.get('ai_feedback'):
+        if session_data.get("ai_feedback"):
             try:
-                feedback = json.loads(session_data['ai_feedback']) if isinstance(session_data['ai_feedback'], str) else session_data['ai_feedback']
+                feedback = (
+                    json.loads(session_data["ai_feedback"])
+                    if isinstance(session_data["ai_feedback"], str)
+                    else session_data["ai_feedback"]
+                )
 
-                if isinstance(feedback.get('strengths'), list) and isinstance(feedback.get('improvements'), list):
-                    story.append(Spacer(1, 0.3*inch))
+                if isinstance(feedback.get("strengths"), list) and isinstance(feedback.get("improvements"), list):
+                    story.append(Spacer(1, 0.3 * inch))
                     story.append(Paragraph("AI Performance Feedback", header_style))
-                    story.append(Spacer(1, 0.1*inch))
+                    story.append(Spacer(1, 0.1 * inch))
 
                     # Strengths
                     strength_label_style = ParagraphStyle(
-                        'StrengthLabel',
-                        parent=styles['Normal'],
+                        "StrengthLabel",
+                        parent=styles["Normal"],
                         fontSize=11,
-                        textColor=colors.HexColor('#28a745'),
-                        fontName='Helvetica-Bold',
-                        spaceAfter=6
+                        textColor=colors.HexColor("#28a745"),
+                        fontName="Helvetica-Bold",
+                        spaceAfter=6,
                     )
                     story.append(Paragraph("What You Did Well", strength_label_style))
-                    for item in feedback['strengths']:
+                    for item in feedback["strengths"]:
                         story.append(Paragraph(f"<b>{item.get('title', '')}</b>", question_style))
-                        story.append(Paragraph(item.get('detail', ''), response_style))
+                        story.append(Paragraph(item.get("detail", ""), response_style))
 
-                    story.append(Spacer(1, 0.15*inch))
+                    story.append(Spacer(1, 0.15 * inch))
 
                     # Improvements
                     improve_label_style = ParagraphStyle(
-                        'ImproveLabel',
-                        parent=styles['Normal'],
+                        "ImproveLabel",
+                        parent=styles["Normal"],
                         fontSize=11,
-                        textColor=colors.HexColor('#BF5700'),
-                        fontName='Helvetica-Bold',
-                        spaceAfter=6
+                        textColor=colors.HexColor("#BF5700"),
+                        fontName="Helvetica-Bold",
+                        spaceAfter=6,
                     )
                     story.append(Paragraph("Areas for Improvement", improve_label_style))
-                    for item in feedback['improvements']:
+                    for item in feedback["improvements"]:
                         story.append(Paragraph(f"<b>{item.get('title', '')}</b>", question_style))
-                        story.append(Paragraph(item.get('detail', ''), response_style))
+                        story.append(Paragraph(item.get("detail", ""), response_style))
 
             except (json.JSONDecodeError, TypeError) as e:
                 print(f"Warning: Could not parse AI feedback for transcript: {e}")
@@ -2237,33 +2329,30 @@ def download_transcript():
         buffer.seek(0)
 
         # Generate filename
-        timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{session_data['company_name'].replace(' ', '_')}_Transcript_{timestamp_str}.pdf"
 
         return Response(
             buffer.getvalue(),
-            mimetype='application/pdf',
-            headers={
-                'Content-Disposition': f'attachment; filename="{filename}"'
-            }
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     except Exception as e:
         print(f"Transcript generation error: {e}")
         import traceback
+
         traceback.print_exc()
         return f"Error generating transcript: {str(e)}", 500
 
-@app.route('/health', methods=['GET'])
+
+@app.route("/health", methods=["GET"])
 def health():
     """Health check endpoint"""
     stats = db.get_session_stats()
-    return jsonify({
-        'status': 'healthy',
-        'ai_available': openai_available,
-        'database': stats
-    })
+    return jsonify({"status": "healthy", "ai_available": openai_available, "database": stats})
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port, debug=False)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port, debug=False)
