@@ -19,8 +19,10 @@ __pycache__/
 flask_session/
 
 # Only track these specific files for the web app:
-# app.py
+# app_v2.py
+# database.py
 # requirements.txt
+# requirements.lock
 # Procfile
 # runtime.txt
 # templates/

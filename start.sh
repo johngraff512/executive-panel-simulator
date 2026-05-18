@@ -43,4 +43,4 @@ fi
 echo "✅ Starting the application..."
 echo "🌐 Open your browser to: http://localhost:5000"
 echo
-python app.py
+gunicorn app_v2:app -b 0.0.0.0:${PORT:-5000} --timeout 300

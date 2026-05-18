@@ -43,5 +43,5 @@ REM Start the application
 echo Starting the application...
 echo Open your browser to: http://localhost:5000
 echo.
-python app.py
+python -m flask --app app_v2 run --host 0.0.0.0 --port 5000
 pause
