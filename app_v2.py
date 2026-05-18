@@ -85,7 +85,13 @@ def clear_cache():
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "fallback-secret-key-for-railway-deployment")
+_secret_key = os.environ.get("SECRET_KEY")
+if not _secret_key:
+    raise RuntimeError(
+        "SECRET_KEY environment variable is required. "
+        "Generate one with: python -c 'import secrets; print(secrets.token_hex(32))'"
+    )
+app.config["SECRET_KEY"] = _secret_key
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # ✅ 50MB for larger files
 
 # Upload configuration

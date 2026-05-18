@@ -26,15 +26,16 @@ Copy `.env.template` to `.env` and add your OpenAI API key:
 cp .env.template .env
 ```
 
-Edit `.env` and add your API key:
+Edit `.env` and add your API key plus a Flask session secret:
 ```
 OPENAI_API_KEY=sk-your-actual-openai-api-key-here
+SECRET_KEY=generate-with-python-c-import-secrets-print-secrets-token_hex-32
 ```
 
 ### 3. Run the Application
 
 ```bash
-python app.py
+python app_v2.py
 ```
 
 Open your browser to `http://localhost:5000`
@@ -84,7 +85,7 @@ Open your browser to `http://localhost:5000`
 ## Customization
 
 ### Adding New Executives
-Edit `app.py` and add new personas to the `ExecutiveAgent.personas` dictionary:
+Edit `app_v2.py` and add new personas to the `ExecutiveAgent.personas` dictionary:
 
 ```python
 'ROLE': {
@@ -141,17 +142,19 @@ def generate_question(self, context: str, question_type: str = 'general') -> str
 ## File Structure
 
 ```
-├── app.py                 # Main Flask application
+├── app_v2.py              # Main Flask application
+├── database.py            # SQLite persistence layer
 ├── requirements.txt       # Python dependencies
-├── .env.template         # Environment configuration template
+├── requirements.lock      # Pinned dependency manifest (uv pip compile)
+├── .env.template          # Environment configuration template
+├── Procfile               # Gunicorn deploy config
 ├── templates/
-│   └── index.html        # Main HTML template
+│   └── index.html         # Main HTML template
 ├── static/
-│   ├── css/
-│   │   └── style.css     # Custom styles
-│   └── js/
-│       └── app.js        # Frontend JavaScript
-└── README.md            # This file
+│   ├── css/style.css      # Custom styles
+│   ├── js/                # Frontend JavaScript
+│   └── images/executives/ # Executive headshots
+└── README.md              # This file
 ```
 
 ## Development Notes
@@ -172,7 +175,7 @@ def generate_question(self, context: str, question_type: str = 'general') -> str
 ## Troubleshooting
 
 ### Common Issues
-- **Port 5000 in use**: Change port in `app.py` or kill existing processes
+- **Port 8080 in use**: Change port in `app_v2.py` (`__main__` block) or kill existing processes
 - **API Key errors**: Verify `.env` file setup and valid OpenAI key
 - **Session errors**: Clear browser cache and restart server
 - **Style issues**: Check static file serving and Bootstrap CDN

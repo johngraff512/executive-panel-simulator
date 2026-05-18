@@ -127,20 +127,11 @@ Version 2 introduces substantial enhancements to the AI Executive Panel Simulato
 - **Rebecca Johnson** (COO) - Brown avatar with "RJ"
 
 **Implementation:**
-- Placeholder images: Colored circles with initials (created automatically)
-- AI-generated option: Script to generate photorealistic headshots with DALL-E 3
-- Images stored in `/static/images/executives/`
-
-**To Generate AI Headshots:**
-```bash
-# Ensure OPENAI_API_KEY is set in environment
-python generate_headshots.py
-```
+- Headshots are static PNG assets bundled in the repo at `/static/images/executives/`
+- Originally generated via DALL-E 3 (since retired by OpenAI on 2026-05-12); regenerate manually if new executives are added
 
 **Code Location:**
 - Images: `/static/images/executives/*.png`
-- Generator script: `generate_headshots.py`
-- Placeholder script: `create_placeholder_headshots.py`
 - Frontend display: `templates/index.html` (lines 1056-1078)
 - CSS: `templates/index.html` (lines 344-390)
 
@@ -151,16 +142,14 @@ python generate_headshots.py
 ### File Structure
 ```
 executive-panel-simulator/
-├── app.py                          # Original version (kept for reference)
-├── app_v2.py                       # Version 2 with all new features
+├── app_v2.py                       # Main Flask application
 ├── database.py                     # SQLite database module
-├── generate_headshots.py           # DALL-E 3 headshot generator
-├── create_placeholder_headshots.py # Placeholder headshot generator
 ├── executive_simulator.db          # SQLite database (created at runtime)
-├── requirements.txt                # Updated dependencies
-├── Procfile                        # Updated to use app_v2
+├── requirements.txt                # Dependencies
+├── requirements.lock               # Pinned dependency manifest
+├── Procfile                        # Gunicorn deploy config
 ├── templates/
-│   └── index.html                  # Updated UI with new features
+│   └── index.html                  # Main UI template
 └── static/
     └── images/
         └── executives/             # Executive headshot images
@@ -188,23 +177,6 @@ Version 2 features increase OpenAI API usage:
 - **DALL-E 3 headshots**: ~$0.04 per headshot (one-time cost)
 
 **Typical session cost**: $0.02-0.05 (vs. ~$0.01 in Version 1)
-
----
-
-## Migration from Version 1
-
-### Automatic Migration
-Version 2 runs alongside Version 1. To switch:
-
-1. **Backend**: Procfile already updated to use `app_v2.py`
-2. **Database**: Created automatically on first run
-3. **Images**: Placeholder headshots created automatically
-
-### To Keep Using Version 1
-Edit `Procfile`:
-```
-web: gunicorn app:app -b 0.0.0.0:$PORT
-```
 
 ---
 
@@ -268,7 +240,7 @@ web: gunicorn app:app -b 0.0.0.0:$PORT
 **Solution**: Delete `executive_simulator.db` to recreate fresh database.
 
 ### Issue: "Headshots not displaying"
-**Solution**: Run `python create_placeholder_headshots.py` to regenerate placeholders.
+**Solution**: Verify the 5 PNG files exist in `/static/images/executives/`. They are static assets committed to the repo; if missing, check git history or re-clone.
 
 ### Issue: "File too large" with 30MB file
 **Solution**: Check `app_v2.py` line 17 - MAX_CONTENT_LENGTH should be 50MB.
