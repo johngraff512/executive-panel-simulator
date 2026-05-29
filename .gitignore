@@ -18,6 +18,9 @@ __pycache__/
 # Session files
 flask_session/
 
+# Runtime SQLite database
+*.db
+
 # Only track these specific files for the web app:
 # app_v2.py
 # database.py
