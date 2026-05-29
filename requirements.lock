@@ -68,8 +68,6 @@ openai==1.109.1
     # via -r requirements.txt
 packaging==26.2
     # via gunicorn
-pdf2image==1.16.3
-    # via -r requirements.txt
 pdfminer-six==20251230
     # via pdfplumber
 pdfplumber==0.11.9
@@ -77,7 +75,6 @@ pdfplumber==0.11.9
 pillow==12.2.0
     # via
     #   -r requirements.txt
-    #   pdf2image
     #   pdfplumber
     #   reportlab
 portkey-ai==2.3.1

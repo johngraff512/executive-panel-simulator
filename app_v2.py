@@ -9,7 +9,6 @@ Enhanced with:
 """
 
 import base64
-import io
 import json
 import os
 import random
@@ -23,7 +22,6 @@ import pdfplumber
 import PyPDF2
 import pytz
 from flask import Flask, Response, jsonify, render_template, request, session
-from pdf2image import convert_from_path
 from werkzeug.utils import secure_filename
 
 # Import database module
@@ -177,78 +175,6 @@ def get_next_executive(selected_executives, current_count):
         return "CEO"
     index = (current_count - 1) % len(selected_executives)
     return selected_executives[index]
-
-
-# ========== NEW: Vision API for PDF Analysis ==========
-def analyze_pdf_with_vision(pdf_path, company_name, industry, report_type):
-    """
-    Analyze PDF using Vision API to extract text AND visual elements
-    Returns comprehensive analysis including charts, graphs, tables, etc.
-    """
-    if not openai_available or not openai_client:
-        return None, None
-
-    try:
-        print("🔍 Analyzing PDF with Vision API...")
-
-        # Convert PDF to images (first 3 pages to manage costs and time)
-        images = convert_from_path(pdf_path, first_page=1, last_page=3)
-        print(f"📄 Converted {len(images)} pages to images")
-
-        all_analysis = []
-
-        # Analyze each page with Vision API
-        for i, img in enumerate(images[:3], 1):  # Limit to first 3 pages for speed
-            print(f"   Analyzing page {i}...")
-
-            # Convert PIL Image to bytes
-            img_byte_arr = io.BytesIO()
-            img.save(img_byte_arr, format="PNG")
-            img_byte_arr.seek(0)
-
-            # Encode image to base64
-            img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
-
-            # Call Vision API (using gpt-4o which supports vision)
-            response = openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": f"Analyze this page from a {report_type} for {company_name} in the {industry} industry. Extract key business insights, data points from charts/graphs/tables, and strategic information. Be specific and comprehensive.",
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{img_base64}",
-                                    "detail": "low",  # Use "low" for faster processing
-                                },
-                            },
-                        ],
-                    }
-                ],
-                max_tokens=500,  # Reduced for faster response
-            )
-
-            page_analysis = response.choices[0].message.content
-            all_analysis.append(f"Page {i}: {page_analysis}")
-            print(f"   ✅ Page {i} analyzed")
-
-        # Combine all analysis
-        full_analysis = "\n\n".join(all_analysis)
-        print(f"✅ Vision analysis complete: {len(full_analysis)} characters")
-
-        return full_analysis, len(images)
-
-    except Exception as e:
-        print(f"❌ Vision API error: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return None, None
 
 
 # ========== Enhanced PDF Processing with PyMuPDF + pdfplumber ==========
@@ -1586,13 +1512,9 @@ def upload_report():
                 f"   📊 Tables: {len(extraction_result['tables'])}, 🖼️ Images: {len(extraction_result['images'])} (analyzed: {len(extraction_result['image_descriptions'])})"
             )
 
-            # OPTIONAL: Full-page Vision analysis (DISABLED - redundant with embedded image analysis)
-            # Embedded image analysis already captures visual content from charts/graphs
-            # Enabling this adds 40-60 seconds for minimal additional value
+            # Full-page Vision analysis is intentionally not run: embedded image
+            # analysis already captures visual content from charts/graphs.
             vision_analysis = None
-            # vision_analysis, page_count = analyze_pdf_with_vision(
-            #     temp_pdf_path, company_name, industry, report_type
-            # )
 
             # Use comprehensive extraction (text + tables + embedded images)
             full_content = report_text  # Already includes text + tables + embedded images
