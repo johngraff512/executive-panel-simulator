@@ -1,112 +1,123 @@
-# Deploying to Azure App Service (`azure` branch)
+# Azure App Service — Deployment & Operations Runbook (`azure` branch)
 
-This branch makes the app deployable on **Azure App Service (Linux)** for a
-single-instance pilot. State lives in **SQLite on the persistent `/home` mount**
-(zero DB cost). The database layer is backend-agnostic (SQLAlchemy Core, selected
-by the `DATABASE_URL` env var), so upgrading to a managed DB later is a
-`DATABASE_URL` change + a driver — not a rewrite.
+**Status: ✅ LIVE pilot.** A full executive-simulator session (PDF upload → analysis →
+Q&A → transcript) was run successfully end-to-end on Azure.
 
-> **Why not local SQLite?** On App Service the local disk is ephemeral and the
-> `/home` mount is slow SMB-backed Azure Files. We put the DB at `/home/data/...`
-> (persists across restarts/deploys, and is *outside* `wwwroot` so redeploys
-> don't wipe it), run a single gunicorn worker (multiple processes on one SQLite
-> file over SMB risk lock/corruption), and avoid WAL journal mode.
+| | |
+|---|---|
+| **Live URL** | https://exec-panel-sim-eqccebashuedepfy.centralus-01.azurewebsites.net |
+| **App name** | `exec-panel-sim` |
+| **Resource group** | `AIExecutivePanel` |
+| **Subscription** | `MGMT-graffjm1` |
+| **Region / Plan** | Central US / **F1 Free** |
+| **Runtime** | Python 3.13 (Linux) |
+| **Database** | SQLite at **`/home/data/executive_simulator.db`** (persistent `/home` mount, $0) |
+| **Deploy method** | Manual zip deploy from Azure Cloud Shell (GitHub Actions was blocked — see note) |
+
+> **Architecture:** state lives in SQLite on the persistent `/home` mount. The DB layer is
+> backend-agnostic (SQLAlchemy Core, chosen by `DATABASE_URL`), so moving to a managed DB later
+> is an env-var + driver change, not a rewrite. Single instance only while on SQLite.
 
 ---
 
-## Step 0 — Push the `azure` branch (prerequisite for the GitHub deploy path)
+## 1. Starting / accessing the app
 
-The portal's GitHub deployment reads from `origin`:
+- **It's always deployed** — just open the **Live URL** above. On the **Free (F1)** plan there's no
+  "Always On", so after idle the first request **cold-starts** (10–30s); subsequent requests are fast.
+- **Health check:** `…/health` returns `{"status":"healthy","database":{...}}`. (This is the app's own
+  route — not Azure's "Health check" feature, which is disabled on Free and isn't needed.)
+- **Restart** (portal: Overview → Restart, or CLI):
+  ```bash
+  az webapp restart --resource-group AIExecutivePanel --name exec-panel-sim
+  ```
+- **Watch it boot / debug:** Cloud Shell →
+  ```bash
+  az webapp log tail --resource-group AIExecutivePanel --name exec-panel-sim
+  ```
+  Ready = gunicorn `Listening at: http://0.0.0.0:8000` + `✅ Database initialized successfully`.
 
-```bash
-git push -u origin azure
-```
+## 2. Required app settings (Environment variables)
 
-(Skip only if deploying via `az webapp up`/zip — see Step 5, Option B.)
-
-## Step 1 — Decide the basics
-
-UT may already have a Resource Group / App Service Plan to reuse.
-
-- **Resource Group:** existing UT one, or create `rg-exec-panel-sim`.
-- **Region:** whatever UT standardizes on (e.g. `Central US`).
-- **App Service Plan** (this is your compute cost — separate from the $0 DB):
-  - **F1 (Free)** — cheapest pilot; no "Always On" (cold starts after idle), 60 min/day CPU quota. Fine for demos.
-  - **B1 (Basic, ~$13/mo)** — supports Always On, steadier. Recommended if a class will hit it live.
-
-## Step 2 — Create the Web App
-
-**Portal → Create a resource → Web App.** Basics tab:
-
-- **Publish:** `Code`
-- **Runtime stack:** `Python 3.13` (use `3.12` if 3.13 isn't offered in your region — all deps support it)
-- **Operating System:** `Linux`
-- **Region / Plan:** from Step 1
-- **Name:** e.g. `exec-panel-sim` → `https://exec-panel-sim.azurewebsites.net`
-
-**Review + create → Create.**
-
-## Step 3 — Application settings (environment variables)
-
-**Web App → Settings → Environment variables → Application settings → + Add** each, then **Apply**:
+All seven are already set. If you ever recreate the app, these are mandatory:
 
 | Name | Value | Notes |
 |---|---|---|
-| `DATABASE_URL` | `sqlite:////home/data/executive_simulator.db` | **Four** slashes = absolute `/home/data/...`. Persists; outside `wwwroot`. |
-| `SECRET_KEY` | *(generated)* | App won't boot without it. Generate: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
-| `OPENAI_API_KEY` | *(your key)* | From local `.env` |
-| `PORTKEY_API_KEY` | *(your key)* | From local `.env` |
-| `PORTKEY_VIRTUAL_KEY` | *(your key)* | From local `.env` |
-| `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true` | Makes Azure (Oryx) `pip install -r requirements.txt` on deploy |
-| `WEBSITES_PORT` | `8000` | Optional; matches the startup bind below |
+| `DATABASE_URL` | `sqlite:////home/data/executive_simulator.db` | **FOUR slashes** = absolute `/home/data/...`. Three slashes = relative path → "no such table" errors. |
+| `SECRET_KEY` | *(secret)* | App refuses to boot without it. Generate: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `OPENAI_API_KEY` | *(secret)* | |
+| `PORTKEY_API_KEY` | *(secret)* | |
+| `PORTKEY_VIRTUAL_KEY` | *(secret)* | |
+| `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true` | Makes Azure run `pip install` on deploy. Without it, deps aren't installed. |
+| `WEBSITES_PORT` | `8000` | Matches the gunicorn bind in the startup command. |
 
-## Step 4 — Startup Command
-
-**Settings → Configuration → General settings → Startup Command.** Azure ignores
-`Procfile`/`$PORT`, and the app object is `app_v2:app` (non-default), so set:
-
+**Startup command** (Configuration → **Stack settings** → Startup command):
 ```
 gunicorn app_v2:app --bind 0.0.0.0:8000 --timeout 300 --graceful-timeout 300 --keep-alive 5 --workers 1 --threads 4
 ```
+`--workers 1` is deliberate for SQLite-on-Azure-Files (multiple processes risk lock/corruption); threads give concurrency.
 
-**Save.** (`--workers 1` is deliberate for SQLite-on-Azure-Files; threads give safe concurrency.)
+## 3. Redeploying after code changes
 
-## Step 5 — Deploy the code
+Push your change to the `azure` branch on GitHub, then in **Cloud Shell**:
 
-**Option A — GitHub Actions (recommended; needs Step 0):**
-1. **Web App → Deployment → Deployment Center.**
-2. **Source:** GitHub → authorize → org `johngraff512`, repo `executive-panel-simulator`, **branch `azure`**.
-3. **Build provider:** GitHub Actions → **Save**. Azure adds a workflow to the branch and runs the first deploy; watch the repo's **Actions** tab.
-
-**Option B — From your Mac via CLI (no GitHub):**
 ```bash
-az webapp up --name exec-panel-sim --resource-group rg-exec-panel-sim --runtime "PYTHON:3.13"
+# (first time in a fresh Cloud Shell session)
+git clone --branch azure --single-branch https://YOUR_PAT@github.com/johngraff512/executive-panel-simulator.git
+cd executive-panel-simulator
+
+# (each redeploy)
+git pull
+zip -r ../app.zip . -x ".git/*" "venv/*" "flask_session/*" "*.db" "*__pycache__*"
+az webapp deploy --resource-group AIExecutivePanel --name exec-panel-sim --src-path ../app.zip --type zip
 ```
 
-## Step 6 — Verify
+`YOUR_PAT` = a GitHub classic PAT with `repo` scope. **Watch the build time** — a real build with
+dependency install takes **minutes**; a 1-second "Build successful" means the build didn't run (check
+`SCM_DO_BUILD_DURING_DEPLOYMENT=true`). The deploy command may print *"failed to start within 10 mins"*
+— that's a cold-start poll timeout, not necessarily a real failure; verify with `…/health`.
 
-1. **Log stream** (Web App → Monitoring → Log stream): expect `✅ Database initialized successfully`. *(A "didn't respond to HTTP pings on port 8000" error → the Step 4 bind port is wrong.)*
-2. **Health:** open `https://<app>.azurewebsites.net/health` → stats JSON.
-3. **Persistence (the important one):** Web App → Development Tools → **SSH**, then:
-   ```bash
-   ls -la /home/data/
-   ```
-   Confirm `executive_simulator.db` exists. **Restart** the app (Overview → Restart) and re-check — it must still be there.
-4. Run a full session in the UI (start → question → answer → end → download transcript) and confirm the transcript PDF shows timestamps.
+> **Why manual zip and not GitHub Actions CI/CD?** Deployment Center → GitHub failed with
+> *"Cannot find SourceControlToken with name GitHub"* — the UT enterprise tenant blocks Azure from
+> storing a GitHub OAuth token. Manual zip deploy (above) sidesteps it. Setting up push-to-deploy CI/CD
+> later requires the **OIDC / federated-identity** route (no token) — a future task.
 
----
+## 4. Further testing checklist
 
-## Notes / gotchas
+**Functional (run real sessions):**
+- [ ] Each executive mix (CEO/CFO/CTO/CMO/COO); 1 vs several executives
+- [ ] Toggles: follow-up questions on/off, web research on/off, AI feedback on/off
+- [ ] PDF variety: small + large reports; a scanned/image-heavy PDF; a non-PDF (error handling)
+- [ ] Full flow to completion → **download the transcript PDF**, confirm timestamps & content render
+- [ ] Audio responses (if used) play back
 
-- **Single instance only** while on SQLite — do **not** enable scale-out (the `/home` file isn't safe for concurrent writers across instances).
-- **`/home` persistence is automatic** for the built-in Python image (no `WEBSITES_ENABLE_APP_SERVICE_STORAGE` — that's for custom containers only).
-- **Upgrading to a managed DB later** (Azure SQL free tier or Postgres) = change `DATABASE_URL` + add a driver to `requirements.txt`. No query rewrites, but two spots in `database.py` carry the only dialect-specific code and have comments where Azure SQL needs its form: `_upsert()` (needs `MERGE`) and `get_conversation_history()` (`LIMIT` → `TOP`/`OFFSET-FETCH`).
-- **Secrets:** later, move keys to **Azure Key Vault** and reference them instead of plain app settings.
+**Persistence (the pilot's core assumption):**
+- [ ] Run a session, then **restart the app**, then confirm prior data survives:
+      `…/health` session count stays > 0; SSH check `sqlite3 /home/data/executive_simulator.db ".tables"`
+      lists `progressive_cache questions responses sessions`
+- [ ] Redeploy code, confirm `/home/data` DB still persists (it's outside `wwwroot`)
 
-## DB target cost reference
+**Load / limits (single-instance pilot risk areas):**
+- [ ] A few simultaneous users (simulate a class) — watch for slowness or DB-lock errors in `log tail`
+- [ ] A very large PDF — confirm it finishes under the 300s request timeout
+- [ ] Cold-start delay after idle is acceptable for your use (or consider B1 Basic + Always On)
 
-| Option | Cost | Trade-off |
-|---|---|---|
-| **SQLite on `/home`** (this pilot) | $0 | Single instance only; not for scale/concurrency |
-| **Azure SQL DB free offer** | $0/mo (lifetime, enterprise-eligible) | T-SQL `MERGE` upsert + ODBC driver on Linux |
-| **PostgreSQL Flexible B1ms** | ~$16/mo (or ~$4 stopped) | Easiest Linux driver, native JSONB |
+**Cost watch:**
+- [ ] Confirm the F1 plan is the only compute cost; DB is $0 (SQLite). No managed-DB charges.
+
+## 5. Gotchas we hit (so they don't bite again)
+
+- **Hostname has a unique suffix** — it's `exec-panel-sim-eqccebashuedepfy.centralus-01.azurewebsites.net`,
+  not the bare `exec-panel-sim.azurewebsites.net`.
+- **`DATABASE_URL` needs four slashes** — three gave `no such table` (relative, ephemeral path).
+- **`SCM_DO_BUILD_DURING_DEPLOYMENT=true` is required** or dependencies never install (1-second "build").
+- **Startup command lives under Stack settings**, not General settings, in the current portal.
+- **App's `/health` ≠ Azure's Health-check feature** (the latter is disabled on Free; fine).
+
+## 6. Future / out of scope
+
+- **CI/CD (push-to-deploy):** set up GitHub Actions via **OIDC federated identity** (the token-free route the
+  tenant allows). Until then, redeploy manually (Section 3).
+- **Scale-out / managed DB:** to move past single-instance, switch `DATABASE_URL` to **Azure SQL free tier**
+  ($0, needs T-SQL `MERGE` + ODBC) or **Postgres Flexible** (~$16/mo). The DB layer is built for it; two spots
+  in `database.py` carry the only dialect-specific code (`_upsert()` and the `LIMIT` in `get_conversation_history`).
+- **Secrets:** move keys from plain app settings into **Azure Key Vault** references.
