@@ -38,17 +38,19 @@ Q&A → transcript) was run successfully end-to-end on Azure.
 
 ## 2. Required app settings (Environment variables)
 
-All seven are already set. If you ever recreate the app, these are mandatory:
+If you ever recreate the app, the settings below marked **required** are mandatory. The AI keys follow a fallback order — see the note under the table.
 
 | Name | Value | Notes |
 |---|---|---|
-| `DATABASE_URL` | `sqlite:////home/data/executive_simulator.db` | **FOUR slashes** = absolute `/home/data/...`. Three slashes = relative path → "no such table" errors. |
-| `SECRET_KEY` | *(secret)* | App refuses to boot without it. Generate: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
-| `OPENAI_API_KEY` | *(secret)* | |
-| `PORTKEY_API_KEY` | *(secret)* | |
-| `PORTKEY_VIRTUAL_KEY` | *(secret)* | |
-| `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true` | Makes Azure run `pip install` on deploy. Without it, deps aren't installed. |
-| `WEBSITES_PORT` | `8000` | Matches the gunicorn bind in the startup command. |
+| `DATABASE_URL` | `sqlite:////home/data/executive_simulator.db` | **Required.** **FOUR slashes** = absolute `/home/data/...`. Three slashes = relative path → "no such table" errors. |
+| `SECRET_KEY` | *(secret)* | **Required.** App refuses to boot without it. Generate: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `PORTKEY_API_KEY` | *(secret)* | **Required for UT API access.** Used together with `PORTKEY_VIRTUAL_KEY`. |
+| `PORTKEY_VIRTUAL_KEY` | *(secret)* | **Required for UT API access.** Used together with `PORTKEY_API_KEY`. |
+| `OPENAI_API_KEY` | *(secret)* | **Optional fallback only.** Ignored when both Portkey vars are set. Used solely if Portkey isn't fully configured — this is a personal OpenAI-billed key, so leave it unset once on Portkey. |
+| `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true` | **Required.** Makes Azure run `pip install` on deploy. Without it, deps aren't installed. |
+| `WEBSITES_PORT` | `8000` | **Required.** Matches the gunicorn bind in the startup command. |
+
+**AI key precedence** (see [app_v2.py:103-127](app_v2.py)): if **both** `PORTKEY_API_KEY` and `PORTKEY_VIRTUAL_KEY` are present, the app routes all calls through the UT Portkey gateway and never reads `OPENAI_API_KEY`. Only if the Portkey pair is missing/incomplete does it fall back to a direct OpenAI client using `OPENAI_API_KEY`. With neither, it runs in demo mode. For the UT setup, set the two Portkey vars and omit `OPENAI_API_KEY` entirely.
 
 **Startup command** (Configuration → **Stack settings** → Startup command):
 ```
