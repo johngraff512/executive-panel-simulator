@@ -32,8 +32,11 @@ if [ ! -f ".env" ]; then
     echo "📝 Copying template..."
     cp .env.template .env
     echo
-    echo "🔧 Please edit .env and add your OpenAI API key:"
-    echo "   OPENAI_API_KEY=sk-your-actual-api-key-here"
+    echo "🔧 Please edit .env and add your API credentials."
+    echo "   Preferred (UT Portkey gateway):"
+    echo "     PORTKEY_API_KEY=...   PORTKEY_VIRTUAL_KEY=..."
+    echo "   Or fallback (direct OpenAI):"
+    echo "     OPENAI_API_KEY=sk-your-actual-api-key-here"
     echo
     echo "Then run this script again."
     exit 1

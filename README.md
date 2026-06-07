@@ -20,17 +20,22 @@ pip install -r requirements.txt
 
 ### 2. Configure Environment
 
-Copy `.env.template` to `.env` and add your OpenAI API key:
+Copy `.env.template` to `.env` and add your API credentials:
 
 ```bash
 cp .env.template .env
 ```
 
-Edit `.env` and add your API key plus a Flask session secret:
+The app prefers the UT Portkey gateway. Set both Portkey vars plus a Flask
+session secret, and leave `OPENAI_API_KEY` blank:
 ```
-OPENAI_API_KEY=sk-your-actual-openai-api-key-here
+PORTKEY_API_KEY=your-portkey-api-key
+PORTKEY_VIRTUAL_KEY=your-portkey-virtual-key
 SECRET_KEY=generate-with-python-c-import-secrets-print-secrets-token_hex-32
 ```
+
+If you're not using Portkey, omit the two Portkey vars and set a personal
+`OPENAI_API_KEY=sk-...` instead — the app falls back to direct OpenAI access.
 
 ### 3. Run the Application
 
@@ -176,7 +181,7 @@ def generate_question(self, context: str, question_type: str = 'general') -> str
 
 ### Common Issues
 - **Port 8080 in use**: Change port in `app_v2.py` (`__main__` block) or kill existing processes
-- **API Key errors**: Verify `.env` file setup and valid OpenAI key
+- **API Key errors**: Verify `.env` setup — either both Portkey vars (preferred) or a valid `OPENAI_API_KEY` fallback
 - **Session errors**: Clear browser cache and restart server
 - **Style issues**: Check static file serving and Bootstrap CDN
 

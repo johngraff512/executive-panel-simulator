@@ -246,7 +246,7 @@ Version 2 features increase OpenAI API usage:
 **Solution**: Check `app_v2.py` line 17 - MAX_CONTENT_LENGTH should be 50MB.
 
 ### Issue: "Web research not working"
-**Solution**: Ensure OPENAI_API_KEY is set. Research fails gracefully if unavailable.
+**Solution**: Ensure AI access is configured — both Portkey vars (preferred) or a fallback `OPENAI_API_KEY`. Research fails gracefully if unavailable.
 
 ---
 

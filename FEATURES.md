@@ -307,7 +307,7 @@ Students practice:
 
 ### Required
 - Python 3.8+
-- OpenAI API key (for GPT-4 Turbo and Vision API)
+- AI access: UT Portkey gateway credentials (`PORTKEY_API_KEY` + `PORTKEY_VIRTUAL_KEY`, preferred) or a fallback `OPENAI_API_KEY`
 - Modern web browser (Chrome, Firefox, Safari, Edge)
 
 ### Optional
