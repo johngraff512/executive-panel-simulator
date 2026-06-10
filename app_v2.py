@@ -2023,12 +2023,19 @@ def question_tts(question_id):
             return jsonify({"status": "error", "error": "Question not found"}), 404
 
         voice = EXECUTIVE_VOICES.get(question["executive_name"], "alloy")
-        tts_response = openai_client.audio.speech.create(
+
+        # Stream chunks through as OpenAI generates them so the browser can
+        # start playback immediately instead of waiting for the full file.
+        upstream = openai_client.audio.speech.with_streaming_response.create(
             model="tts-1", voice=voice, input=question["question_text"][:500]
         )
 
+        def generate():
+            with upstream as tts_response:
+                yield from tts_response.iter_bytes(chunk_size=4096)
+
         return Response(
-            tts_response.content,
+            generate(),
             mimetype="audio/mpeg",
             headers={"Content-Disposition": "inline; filename=question.mp3", "Cache-Control": "no-cache"},
         )

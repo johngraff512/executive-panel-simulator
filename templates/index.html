@@ -2907,18 +2907,12 @@
                         this.audioElement.src = question.tts_url;
                         await this.audioElement.play();
                     } else if (question.question_id) {
-                        // Question text is shown immediately; audio is fetched
-                        // separately so students aren't kept waiting on TTS
-                        console.log('🎙️ Fetching TTS for question', question.question_id);
-                        const response = await fetch(`/question_tts/${question.question_id}`);
-                        if (!response.ok) throw new Error('TTS unavailable');
-                        const blob = await response.blob();
-
-                        if (this.currentAudioUrl) {
-                            URL.revokeObjectURL(this.currentAudioUrl);
-                        }
-                        this.currentAudioUrl = URL.createObjectURL(blob);
-                        this.audioElement.src = this.currentAudioUrl;
+                        // Point the audio element straight at the streaming
+                        // endpoint: the browser starts playing as soon as the
+                        // first audio chunks arrive, instead of waiting for
+                        // the full file to be generated and downloaded
+                        console.log('🎙️ Streaming TTS for question', question.question_id);
+                        this.audioElement.src = `/question_tts/${question.question_id}`;
                         await this.audioElement.play();
                     } else {
                         console.log('⚠️ No TTS available');
