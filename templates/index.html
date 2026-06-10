@@ -2925,9 +2925,13 @@
                 }
 
                 // Inline audio (closing message) or the streaming endpoint,
-                // where playback starts as soon as the first chunks arrive
+                // where playback starts as soon as the first chunks arrive.
+                // The signed token replaces cookies (Safari's media process
+                // doesn't reliably send them with audio requests)
                 const src = question.tts_url
-                    || (question.question_id ? `/question_tts/${question.question_id}` : null);
+                    || (question.question_id
+                        ? `/question_tts/${question.question_id}?token=${question.tts_token || ''}`
+                        : null);
 
                 if (!src) {
                     console.log('⚠️ No TTS available');

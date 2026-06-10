@@ -9,6 +9,7 @@ Enhanced with:
 """
 
 import base64
+import hashlib
 import hmac
 import json
 import os
@@ -96,8 +97,23 @@ app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # ✅ 50MB for larger files
 
 # Optional shared access code. When set, every page/endpoint (except /health)
 # requires the code once per browser session; when unset, the app is open.
+# question_tts is exempt because browser media stacks (notably Safari's) do
+# not reliably send cookies with <audio> requests -- it is protected by a
+# signed per-question token instead (see _tts_token).
 ACCESS_CODE = os.environ.get("ACCESS_CODE", "").strip()
-_ACCESS_EXEMPT_ENDPOINTS = {"access", "health", "static"}
+_ACCESS_EXEMPT_ENDPOINTS = {"access", "health", "static", "question_tts"}
+
+
+def _tts_token(question_id):
+    """Signed token authorizing TTS playback for exactly one question.
+
+    Audio requests can't rely on the session cookie (Safari's media process
+    drops cookies), so question payloads carry this token and /question_tts
+    verifies it. Only the server can mint tokens, so the endpoint still can't
+    be used as an open TTS relay.
+    """
+    msg = f"tts:{question_id}".encode()
+    return hmac.new(app.config["SECRET_KEY"].encode(), msg, hashlib.sha256).hexdigest()[:32]
 
 
 @app.before_request
@@ -1471,6 +1487,7 @@ def launch_panel():
                     "question": first_question,
                     "timestamp": datetime.now(CST).isoformat(),
                     "question_id": first_question_id,
+                    "tts_token": _tts_token(first_question_id),
                     "image": get_executive_image(first_executive),
                 },
                 "ai_mode": "enabled" if openai_available else "demo",
@@ -1713,6 +1730,7 @@ def respond_to_executive():
                         "question": followup_question,
                         "timestamp": datetime.now(CST).isoformat(),
                         "question_id": followup_question_id,
+                        "tts_token": _tts_token(followup_question_id),
                         "image": get_executive_image(exec_role),
                         "is_followup": True,
                     },
@@ -1802,6 +1820,7 @@ def respond_to_executive():
                     "question": next_question,
                     "timestamp": datetime.now(CST).isoformat(),
                     "question_id": next_question_id,
+                    "tts_token": _tts_token(next_question_id),
                     "image": get_executive_image(next_exec),
                 },
             }
@@ -1897,6 +1916,7 @@ def respond_to_executive_audio():
                             "question": followup_question,
                             "timestamp": datetime.now(CST).isoformat(),
                             "question_id": followup_question_id,
+                            "tts_token": _tts_token(followup_question_id),
                             "image": get_executive_image(exec_role),
                             "is_followup": True,
                         },
@@ -1982,6 +2002,7 @@ def respond_to_executive_audio():
                         "question": next_question,
                         "timestamp": datetime.now(CST).isoformat(),
                         "question_id": next_question_id,
+                        "tts_token": _tts_token(next_question_id),
                         "image": get_executive_image(next_exec),
                     },
                 }
@@ -2006,20 +2027,24 @@ def respond_to_executive_audio():
 
 @app.route("/question_tts/<int:question_id>", methods=["GET"])
 def question_tts(question_id):
-    """Generate TTS audio for a question belonging to the caller's session.
+    """Stream TTS audio for one server-issued question.
 
     Replaces the old /generate_tts route, which accepted arbitrary text and
-    was an open relay for API spend. Here the text comes from the database
-    and the question must belong to the requesting browser's session.
+    was an open relay for API spend. The text comes from the database, and
+    the request must carry the signed token handed out with the question
+    (cookies are deliberately not used -- Safari's media process drops them
+    on <audio> requests).
     """
     try:
         if not openai_available or not openai_client:
             return jsonify({"status": "error", "error": "TTS not available"}), 503
 
-        sid = get_session_id()
-        question = db.get_question(question_id)
+        token = request.args.get("token", "")
+        if not hmac.compare_digest(token, _tts_token(question_id)):
+            return jsonify({"status": "error", "error": "Invalid or missing token"}), 403
 
-        if not question or question["session_id"] != sid:
+        question = db.get_question(question_id)
+        if not question:
             return jsonify({"status": "error", "error": "Question not found"}), 404
 
         voice = EXECUTIVE_VOICES.get(question["executive_name"], "alloy")
