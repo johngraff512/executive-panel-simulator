@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Required - AI Executive Panel Simulator</title>
+    <style>
+        :root {
+            --texas-orange: #BF5700;
+            --texas-orange-dark: #9A4600;
+            --charcoal: #333F48;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f8f9fa;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .access-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+            padding: 2.5rem;
+            max-width: 420px;
+            width: 90%;
+            text-align: center;
+        }
+        .access-card img {
+            max-height: 60px;
+            margin-bottom: 1.5rem;
+        }
+        h1 {
+            color: var(--charcoal);
+            font-size: 1.4rem;
+            margin: 0 0 0.5rem;
+        }
+        p {
+            color: #6c757d;
+            margin: 0 0 1.5rem;
+        }
+        input[type="password"] {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 0.75rem 1rem;
+            font-size: 1.1rem;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        input[type="password"]:focus {
+            outline: none;
+            border-color: var(--texas-orange);
+            box-shadow: 0 0 0 3px rgba(191, 87, 0, 0.15);
+        }
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: white;
+            background: var(--texas-orange);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: var(--texas-orange-dark);
+        }
+        .error {
+            color: #dc3545;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="access-card">
+        <img src="{{ url_for('static', filename='mccombs-logo.jpg') }}" alt="McCombs School of Business">
+        <h1>AI Executive Panel Simulator</h1>
+        <p>Enter the access code provided by your instructor.</p>
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+        <form method="POST" action="{{ url_for('access') }}">
+            <input type="password" name="access_code" placeholder="Access code" autofocus autocomplete="off" required>
+            <button type="submit">Enter</button>
+        </form>
+    </div>
+</body>
+</html>

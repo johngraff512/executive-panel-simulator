@@ -9,19 +9,21 @@ Enhanced with:
 """
 
 import base64
+import hmac
 import json
 import os
 import random
 import tempfile
 from datetime import datetime
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 import fitz  # PyMuPDF
 import openai
 import pdfplumber
 import PyPDF2
 import pytz
-from flask import Flask, Response, jsonify, render_template, request, session
+from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.utils import secure_filename
 
 # Import database module
@@ -91,6 +93,35 @@ if not _secret_key:
     )
 app.config["SECRET_KEY"] = _secret_key
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # ✅ 50MB for larger files
+
+# Optional shared access code. When set, every page/endpoint (except /health)
+# requires the code once per browser session; when unset, the app is open.
+ACCESS_CODE = os.environ.get("ACCESS_CODE", "").strip()
+_ACCESS_EXEMPT_ENDPOINTS = {"access", "health", "static"}
+
+
+@app.before_request
+def require_access_code():
+    """Gate the app behind a shared access code when ACCESS_CODE is set."""
+    if not ACCESS_CODE:
+        return None
+    if request.endpoint in _ACCESS_EXEMPT_ENDPOINTS:
+        return None
+    if session.get("access_granted"):
+        return None
+    if request.endpoint == "index":
+        return render_template("access.html", error=None), 401
+    return jsonify({"status": "error", "error": "Access code required. Please reload the page."}), 401
+
+
+@app.route("/access", methods=["POST"])
+def access():
+    """Validate the shared access code and unlock the session."""
+    code = (request.form.get("access_code") or "").strip()
+    if ACCESS_CODE and hmac.compare_digest(code, ACCESS_CODE):
+        session["access_granted"] = True
+        return redirect(url_for("index"))
+    return render_template("access.html", error="Incorrect access code. Please try again."), 401
 
 # Upload configuration
 UPLOAD_FOLDER = tempfile.gettempdir()
@@ -329,49 +360,48 @@ def analyze_images_with_vision(images, max_images=5):
         sorted_images = sorted(images, key=lambda x: x["size"], reverse=True)
         images_to_analyze = sorted_images[:max_images]
 
-        print(f"🖼️ Analyzing {len(images_to_analyze)} embedded images with Vision API...")
+        print(f"🖼️ Analyzing {len(images_to_analyze)} embedded images in one Vision API call...")
+
+        # Build a single multi-image request: one round trip instead of one
+        # call per image, and the model can cross-reference related charts.
+        content = [
+            {
+                "type": "text",
+                "text": (
+                    f"You will be shown {len(images_to_analyze)} images from a business report, "
+                    "each labeled with its number. For EACH image: describe what it shows "
+                    "(chart, graph, diagram, etc.), extract any visible data or trends, and "
+                    "explain its business significance. Be concise but thorough.\n\n"
+                    'Return ONLY a JSON object: {"images": [{"image_number": 1, "description": "..."}, ...]} '
+                    "with one entry per image."
+                ),
+            }
+        ]
+        for i, img in enumerate(images_to_analyze, 1):
+            img_b64 = base64.b64encode(img["bytes"]).decode("utf-8")
+            mime_type = f"image/{img['ext']}" if img["ext"] in ["png", "jpeg", "jpg", "gif", "webp"] else "image/png"
+            content.append({"type": "text", "text": f"Image {i} (from page {img['page']}):"})
+            content.append(
+                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{img_b64}", "detail": "high"}}
+            )
+
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": content}],
+            response_format={"type": "json_object"},
+            max_tokens=500 * len(images_to_analyze),
+        )
+
+        result = json.loads(response.choices[0].message.content)
 
         image_descriptions = []
+        for item in result.get("images", []):
+            n = item.get("image_number")
+            description = item.get("description")
+            if isinstance(n, int) and 1 <= n <= len(images_to_analyze) and description:
+                image_descriptions.append({"page": images_to_analyze[n - 1]["page"], "description": description})
 
-        for img in images_to_analyze:
-            try:
-                # Convert image bytes to base64
-                img_b64 = base64.b64encode(img["bytes"]).decode("utf-8")
-
-                # Determine image format
-                mime_type = (
-                    f"image/{img['ext']}" if img["ext"] in ["png", "jpeg", "jpg", "gif", "webp"] else "image/png"
-                )
-
-                # Analyze with Vision API
-                response = openai_client.chat.completions.create(
-                    model="gpt-4o",  # Using GPT-4o for vision
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": "Analyze this image from a business report. Describe what it shows (chart, graph, diagram, etc.), extract any visible data or trends, and explain its business significance. Be concise but thorough.",
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {"url": f"data:{mime_type};base64,{img_b64}", "detail": "high"},
-                                },
-                            ],
-                        }
-                    ],
-                    max_tokens=500,
-                )
-
-                description = response.choices[0].message.content
-                image_descriptions.append({"page": img["page"], "description": description})
-
-                print(f"✅ Analyzed embedded image from page {img['page']}")
-
-            except Exception as e:
-                print(f"⚠️ Could not analyze image from page {img['page']}: {e}")
-
+        print(f"✅ Analyzed {len(image_descriptions)}/{len(images_to_analyze)} embedded images")
         return image_descriptions
 
     except Exception as e:
@@ -997,11 +1027,15 @@ def generate_template_question(executive, question_number):
 
 
 def generate_closing_message(company_name, report_type):
-    """Generate closing message"""
+    """Generate a neutral closing message.
+
+    Intentionally contains no performance judgment -- the evidence-based AI
+    feedback at session end is where evaluation belongs.
+    """
     messages = [
-        f"Thank you for presenting your {report_type} for {company_name}. Your responses demonstrate strategic thinking.",
-        f"Excellent presentation of {company_name}'s strategy. You've addressed our key concerns well.",
-        f"Thank you for the comprehensive overview. Your {report_type} shows promise for {company_name}.",
+        f"That concludes our questions for today. Thank you for presenting your {report_type} for {company_name}.",
+        f"We're out of time for today. Thank you for walking us through your {report_type} for {company_name}.",
+        f"That wraps up this session. Thank you for presenting {company_name}'s {report_type} to the panel.",
     ]
     return random.choice(messages)
 
@@ -1107,20 +1141,22 @@ Return ONLY valid JSON, no other text."""
 
 
 # ========== TTS and Audio ==========
+EXECUTIVE_VOICES = {
+    "Sarah Chen": "nova",
+    "Michael Rodriguez": "onyx",
+    "Dr. Lisa Kincaid": "shimmer",
+    "James Thompson": "fable",
+    "Rebecca Johnson": "alloy",
+}
+
+
 def generate_tts_audio(text, executive_name):
     """Generate TTS audio and return as base64 data URL"""
     if not openai_available or not openai_client:
         return None
 
     try:
-        voice_mapping = {
-            "Sarah Chen": "nova",
-            "Michael Rodriguez": "onyx",
-            "Dr. Lisa Kincaid": "shimmer",
-            "James Thompson": "fable",
-            "Rebecca Johnson": "alloy",
-        }
-        voice = voice_mapping.get(executive_name, "alloy")
+        voice = EXECUTIVE_VOICES.get(executive_name, "alloy")
 
         print(f"🎙️ Pre-generating TTS for {executive_name}")
 
@@ -1385,9 +1421,7 @@ def launch_panel():
             conversation_history=[],  # First question, no history yet
         )
 
-        # Generate TTS for first question
         exec_name = get_executive_name(first_executive)
-        first_tts_url = generate_tts_audio(first_question, exec_name)
 
         # Create session in database
         sid = get_session_id()
@@ -1406,8 +1440,10 @@ def launch_panel():
             company_research=company_research,
         )
 
-        # Add first question to database
-        db.add_question(
+        # Add first question to database. TTS is NOT generated here -- the
+        # browser fetches it from /question_tts/<id> after displaying the
+        # question, so students see the question immediately.
+        first_question_id = db.add_question(
             session_id=sid,
             executive=first_executive,
             executive_name=exec_name,
@@ -1434,7 +1470,7 @@ def launch_panel():
                     "title": first_executive,
                     "question": first_question,
                     "timestamp": datetime.now(CST).isoformat(),
-                    "tts_url": first_tts_url,
+                    "question_id": first_question_id,
                     "image": get_executive_image(first_executive),
                 },
                 "ai_mode": "enabled" if openai_available else "demo",
@@ -1656,17 +1692,14 @@ def respond_to_executive():
             exec_name = last_question["executive_name"]
             exec_role = last_question["executive"]
 
-            # Add follow-up question to database
-            db.add_question(
+            # Add follow-up question to database (TTS fetched separately by browser)
+            followup_question_id = db.add_question(
                 session_id=sid,
                 executive=exec_role,
                 executive_name=exec_name,
                 question_text=followup_question,
                 is_followup=True,
             )
-
-            # Generate TTS for follow-up
-            tts_url = generate_tts_audio(followup_question, exec_name)
 
             print(f"🔄 {exec_role} asking follow-up question")
 
@@ -1679,7 +1712,7 @@ def respond_to_executive():
                         "title": exec_role,
                         "question": followup_question,
                         "timestamp": datetime.now(CST).isoformat(),
-                        "tts_url": tts_url,
+                        "question_id": followup_question_id,
                         "image": get_executive_image(exec_role),
                         "is_followup": True,
                     },
@@ -1743,10 +1776,9 @@ def respond_to_executive():
         )
 
         exec_name = get_executive_name(next_exec)
-        tts_url = generate_tts_audio(next_question, exec_name)
 
-        # Add question to database
-        db.add_question(
+        # Add question to database (TTS fetched separately by browser)
+        next_question_id = db.add_question(
             session_id=sid,
             executive=next_exec,
             executive_name=exec_name,
@@ -1769,7 +1801,7 @@ def respond_to_executive():
                     "title": next_exec,
                     "question": next_question,
                     "timestamp": datetime.now(CST).isoformat(),
-                    "tts_url": tts_url,
+                    "question_id": next_question_id,
                     "image": get_executive_image(next_exec),
                 },
             }
@@ -1844,15 +1876,13 @@ def respond_to_executive_audio():
                 exec_name = last_question["executive_name"]
                 exec_role = last_question["executive"]
 
-                db.add_question(
+                followup_question_id = db.add_question(
                     session_id=sid,
                     executive=exec_role,
                     executive_name=exec_name,
                     question_text=followup_question,
                     is_followup=True,
                 )
-
-                tts_url = generate_tts_audio(followup_question, exec_name)
 
                 print(f"🔄 {exec_role} asking follow-up question")
 
@@ -1866,7 +1896,7 @@ def respond_to_executive_audio():
                             "title": exec_role,
                             "question": followup_question,
                             "timestamp": datetime.now(CST).isoformat(),
-                            "tts_url": tts_url,
+                            "question_id": followup_question_id,
                             "image": get_executive_image(exec_role),
                             "is_followup": True,
                         },
@@ -1927,9 +1957,8 @@ def respond_to_executive_audio():
             )
 
             exec_name = get_executive_name(next_exec)
-            tts_url = generate_tts_audio(next_question, exec_name)
 
-            db.add_question(
+            next_question_id = db.add_question(
                 session_id=sid,
                 executive=next_exec,
                 executive_name=exec_name,
@@ -1952,7 +1981,7 @@ def respond_to_executive_audio():
                         "title": next_exec,
                         "question": next_question,
                         "timestamp": datetime.now(CST).isoformat(),
-                        "tts_url": tts_url,
+                        "question_id": next_question_id,
                         "image": get_executive_image(next_exec),
                     },
                 }
@@ -1975,29 +2004,31 @@ def respond_to_executive_audio():
         return jsonify({"status": "error", "error": f"Error processing audio: {str(e)}"})
 
 
-@app.route("/generate_tts", methods=["POST"])
-def generate_tts():
-    """Generate text-to-speech audio for executive questions"""
+@app.route("/question_tts/<int:question_id>", methods=["GET"])
+def question_tts(question_id):
+    """Generate TTS audio for a question belonging to the caller's session.
+
+    Replaces the old /generate_tts route, which accepted arbitrary text and
+    was an open relay for API spend. Here the text comes from the database
+    and the question must belong to the requesting browser's session.
+    """
     try:
-        data = request.get_json()
-        text = data.get("text", "")
-        voice = data.get("voice", "alloy")
-
-        if not text:
-            return jsonify({"status": "error", "error": "No text provided"})
-
         if not openai_available or not openai_client:
-            return jsonify({"status": "error", "error": "TTS not available"})
+            return jsonify({"status": "error", "error": "TTS not available"}), 503
 
-        print(f"🎙️ Generating TTS with voice: {voice}")
+        sid = get_session_id()
+        question = db.get_question(question_id)
 
-        response = openai_client.audio.speech.create(model="tts-1", voice=voice, input=text, speed=1.0)
+        if not question or question["session_id"] != sid:
+            return jsonify({"status": "error", "error": "Question not found"}), 404
 
-        audio_content = response.content
-        print(f"✅ Generated {len(audio_content)} bytes of audio")
+        voice = EXECUTIVE_VOICES.get(question["executive_name"], "alloy")
+        tts_response = openai_client.audio.speech.create(
+            model="tts-1", voice=voice, input=question["question_text"][:500]
+        )
 
         return Response(
-            audio_content,
+            tts_response.content,
             mimetype="audio/mpeg",
             headers={"Content-Disposition": "inline; filename=question.mp3", "Cache-Control": "no-cache"},
         )
@@ -2177,9 +2208,13 @@ def download_transcript():
         story.append(Paragraph("Conversation Transcript", header_style))
         story.append(Spacer(1, 0.1 * inch))
 
+        # ReportLab Paragraphs parse their input as XML, so any user/AI text
+        # must be escaped or a stray "<" or "&" breaks the whole download.
         for question, response in zip(questions, responses, strict=False):
             # Question
-            story.append(Paragraph(f"<b>{question['executive_name']}</b> ({question['executive']})", exec_style))
+            story.append(
+                Paragraph(f"<b>{escape(question['executive_name'])}</b> ({escape(question['executive'])})", exec_style)
+            )
 
             if question.get("timestamp"):
                 try:
@@ -2190,7 +2225,7 @@ def download_transcript():
                     pass
 
             followup_marker = " [Follow-up]" if question.get("is_followup") else ""
-            story.append(Paragraph(f"Q{followup_marker}: {question['question_text']}", question_style))
+            story.append(Paragraph(f"Q{followup_marker}: {escape(question['question_text'])}", question_style))
 
             # Response
             if response.get("timestamp"):
@@ -2202,7 +2237,7 @@ def download_transcript():
                     pass
 
             response_marker = " [Audio Response]" if response["response_type"] == "audio" else ""
-            story.append(Paragraph(f"A{response_marker}: {response['response_text']}", response_style))
+            story.append(Paragraph(f"A{response_marker}: {escape(response['response_text'])}", response_style))
             story.append(Spacer(1, 0.1 * inch))
 
         # AI Feedback section (if available)
@@ -2230,8 +2265,8 @@ def download_transcript():
                     )
                     story.append(Paragraph("What You Did Well", strength_label_style))
                     for item in feedback["strengths"]:
-                        story.append(Paragraph(f"<b>{item.get('title', '')}</b>", question_style))
-                        story.append(Paragraph(item.get("detail", ""), response_style))
+                        story.append(Paragraph(f"<b>{escape(item.get('title', ''))}</b>", question_style))
+                        story.append(Paragraph(escape(item.get("detail", "")), response_style))
 
                     story.append(Spacer(1, 0.15 * inch))
 
@@ -2246,8 +2281,8 @@ def download_transcript():
                     )
                     story.append(Paragraph("Areas for Improvement", improve_label_style))
                     for item in feedback["improvements"]:
-                        story.append(Paragraph(f"<b>{item.get('title', '')}</b>", question_style))
-                        story.append(Paragraph(item.get("detail", ""), response_style))
+                        story.append(Paragraph(f"<b>{escape(item.get('title', ''))}</b>", question_style))
+                        story.append(Paragraph(escape(item.get("detail", "")), response_style))
 
             except (json.JSONDecodeError, TypeError) as e:
                 print(f"Warning: Could not parse AI feedback for transcript: {e}")

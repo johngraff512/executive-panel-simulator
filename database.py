@@ -255,6 +255,10 @@ def create_session(
     # Reset every column on conflict to match INSERT OR REPLACE's fresh-row
     # semantics (so a retried create_session does not keep a stale state).
     with get_db() as conn:
+        # A reused session_id means a new panel from the same browser; clear
+        # prior questions/responses so history doesn't bleed across panels.
+        conn.execute(responses.delete().where(responses.c.session_id == session_id))
+        conn.execute(questions.delete().where(questions.c.session_id == session_id))
         _upsert(
             conn,
             sessions,
@@ -320,6 +324,13 @@ def add_question(session_id, executive, executive_name, question_text, is_follow
             )
         )
         return result.inserted_primary_key[0]
+
+
+def get_question(question_id):
+    """Get a single question by id (or None)."""
+    with engine.connect() as conn:
+        row = conn.execute(select(questions).where(questions.c.id == question_id)).fetchone()
+    return dict(row._mapping) if row else None
 
 
 def get_questions(session_id):

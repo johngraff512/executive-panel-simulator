@@ -47,6 +47,7 @@ If you ever recreate the app, the settings below marked **required** are mandato
 | `PORTKEY_API_KEY` | *(secret)* | **Required for UT API access.** Used together with `PORTKEY_VIRTUAL_KEY`. |
 | `PORTKEY_VIRTUAL_KEY` | *(secret)* | **Required for UT API access.** Used together with `PORTKEY_API_KEY`. |
 | `OPENAI_API_KEY` | *(secret)* | **Optional fallback only.** Ignored when both Portkey vars are set. Used solely if Portkey isn't fully configured — this is a personal OpenAI-billed key, so leave it unset once on Portkey. |
+| `ACCESS_CODE` | *(secret)* | **Recommended.** Shared code students enter once per browser session before using the app — keeps strangers who find the URL from spending API budget. Unset = gate disabled. |
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true` | **Required.** Makes Azure run `pip install` on deploy. Without it, deps aren't installed. |
 | `WEBSITES_PORT` | `8000` | **Required.** Matches the gunicorn bind in the startup command. |
 
