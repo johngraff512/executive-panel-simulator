@@ -1206,7 +1206,10 @@ def pregenerate_question_tts(question_id, question_text, executive_name):
     def work():
         try:
             voice = EXECUTIVE_VOICES.get(executive_name, "alloy")
-            with openai_client.audio.speech.with_streaming_response.create(
+            # Tight timeout: the SDK default is 600s, and a hung TTS call
+            # would leave the job stalled with followers holding server
+            # threads. 30s read-timeout per chunk is generous for tts-1.
+            with openai_client.with_options(timeout=30.0).audio.speech.with_streaming_response.create(
                 model="tts-1", voice=voice, input=question_text[:500]
             ) as tts_response:
                 for chunk in tts_response.iter_bytes(chunk_size=4096):
@@ -1226,11 +1229,16 @@ def pregenerate_question_tts(question_id, question_text, executive_name):
 
 
 def _follow_tts_job(job):
-    """Yield a job's audio chunks as they arrive (works mid-generation)."""
+    """Yield a job's audio chunks as they arrive (works mid-generation).
+
+    The 15s wait cap matters: this generator runs on a gunicorn worker
+    thread, and a stalled job must release that thread quickly or a few
+    stuck audio streams can starve the whole single-worker pool.
+    """
     index = 0
     while True:
         with job.cond:
-            ready = job.cond.wait_for(lambda i=index: len(job.chunks) > i or job.done, timeout=60)
+            ready = job.cond.wait_for(lambda i=index: len(job.chunks) > i or job.done, timeout=15)
             new_chunks = job.chunks[index:]
             done = job.done
         index += len(new_chunks)
@@ -1249,8 +1257,9 @@ def generate_tts_audio(text, executive_name):
 
         print(f"🎙️ Pre-generating TTS for {executive_name}")
 
-        # Generate TTS (removed signal-based timeout as it conflicts with Gunicorn workers)
-        tts_response = openai_client.audio.speech.create(model="tts-1", voice=voice, input=text[:500])
+        tts_response = openai_client.with_options(timeout=30.0).audio.speech.create(
+            model="tts-1", voice=voice, input=text[:500]
+        )
 
         audio_data = base64.b64encode(tts_response.content).decode("utf-8")
         tts_url = f"data:audio/mpeg;base64,{audio_data}"
@@ -2138,7 +2147,7 @@ def question_tts(question_id):
         # Fallback (no job: worker restarted, job evicted, or pre-generation
         # failed): stream live from OpenAI as chunks are generated.
         voice = EXECUTIVE_VOICES.get(question["executive_name"], "alloy")
-        upstream = openai_client.audio.speech.with_streaming_response.create(
+        upstream = openai_client.with_options(timeout=30.0).audio.speech.with_streaming_response.create(
             model="tts-1", voice=voice, input=question["question_text"][:500]
         )
 

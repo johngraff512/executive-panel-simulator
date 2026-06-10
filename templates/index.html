@@ -2619,15 +2619,21 @@
                 this.showLoadingMessage('Executive is considering your response...');
                 
                 try {
-                    const response = await fetch('/respond_to_executive', {
+                    // Time out rather than spin forever if the server is
+                    // wedged (e.g. all worker threads busy)
+                    const fetchOptions = {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             response: responseText,
                             executive_role: this.currentExecutive
                         })
-                    });
-                    
+                    };
+                    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+                        fetchOptions.signal = AbortSignal.timeout(120000);
+                    }
+                    const response = await fetch('/respond_to_executive', fetchOptions);
+
                     const data = await response.json();
                     
                     if (data.status === 'success') {
@@ -2658,7 +2664,11 @@
                     }
                 } catch (error) {
                     this.hideLoadingMessage();
-                    alert('Error getting executive response: ' + error.message);
+                    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+                        alert('The executive is taking too long to respond. Please send your response again.');
+                    } else {
+                        alert('Error getting executive response: ' + error.message);
+                    }
                     this.showResponseArea(this.currentExecutive);
                 }
             }
@@ -3024,9 +3034,26 @@
                 this.currentAudioSrc = src;
 
                 try {
-                    console.log('🎙️ Playing TTS');
+                    console.log('🎙️ Playing TTS:', src.slice(0, 80));
                     this.audioElement.src = src;
-                    await this.audioElement.play();
+
+                    // If playback hasn't started within 10s the stream is
+                    // stalled -- give up and release the connection (a held
+                    // connection ties up a server thread). The text has
+                    // already been revealed by presentQuestion's own timeout.
+                    const playPromise = this.audioElement.play();
+                    playPromise.catch(() => {});  // absorb late rejection if we give up below
+                    const outcome = await Promise.race([
+                        playPromise.then(() => 'playing'),
+                        new Promise(resolve => setTimeout(() => resolve('stalled'), 10000))
+                    ]);
+                    if (outcome === 'stalled' && this.currentAudioSrc === src) {
+                        console.warn('⚠️ Audio never started, giving up:', src.slice(0, 80));
+                        this.audioElement.pause();
+                        this.audioElement.removeAttribute('src');
+                        this.audioElement.load();  // abort the network fetch
+                        this.currentAudioSrc = null;
+                    }
                 } catch (error) {
                     console.error('TTS error:', error);
                     // One retry for transient failures (e.g. a cold first
@@ -3036,7 +3063,7 @@
                         try {
                             await new Promise(resolve => setTimeout(resolve, 800));
                             if (this.currentAudioSrc !== src) return;
-                            console.log('🔁 Retrying TTS');
+                            console.log('🔁 Retrying TTS:', src.slice(0, 80));
                             this.audioElement.src = src;
                             await this.audioElement.play();
                         } catch (retryError) {

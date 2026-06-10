@@ -55,9 +55,11 @@ If you ever recreate the app, the settings below marked **required** are mandato
 
 **Startup command** (Configuration → **Stack settings** → Startup command):
 ```
-gunicorn app_v2:app --bind 0.0.0.0:8000 --timeout 300 --graceful-timeout 300 --keep-alive 5 --workers 1 --threads 4
+gunicorn app_v2:app --bind 0.0.0.0:8000 --timeout 300 --graceful-timeout 300 --keep-alive 5 --workers 1 --threads 8
 ```
-`--workers 1` is deliberate for SQLite-on-Azure-Files (multiple processes risk lock/corruption); threads give concurrency.
+`--workers 1` is deliberate for SQLite-on-Azure-Files (multiple processes risk lock/corruption); threads give
+concurrency. `--threads 8` (raised from 4): streamed question audio holds a thread per connection while it
+plays, so 4 threads could starve under one user's audio streams + an in-flight question request.
 
 ## 3. Redeploying after code changes
 

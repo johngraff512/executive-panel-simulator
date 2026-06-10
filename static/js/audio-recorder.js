@@ -95,10 +95,12 @@ class AudioRecorder {
         this.showProcessingIndicator();
 
         try {
-            const response = await fetch('/respond_to_executive_audio', {
-                method: 'POST',
-                body: formData
-            });
+            // Time out rather than spin forever if the server is wedged
+            const fetchOptions = { method: 'POST', body: formData };
+            if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+                fetchOptions.signal = AbortSignal.timeout(120000);
+            }
+            const response = await fetch('/respond_to_executive_audio', fetchOptions);
 
             const result = await response.json();
 
