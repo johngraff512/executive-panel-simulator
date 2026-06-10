@@ -2737,10 +2737,13 @@
                 this.endSessionInFlight = true;
 
                 try {
-                    // Stop any playing audio
+                    // Stop any playing audio (removeAttribute, not src='':
+                    // an empty src resolves to the page URL and fires a
+                    // spurious media error)
                     if (this.audioElement) {
                         this.audioElement.pause();
-                        this.audioElement.src = '';
+                        this.audioElement.removeAttribute('src');
+                        this.audioElement.load();
                         this.currentAudioSrc = null;
                     }
 
@@ -3117,7 +3120,8 @@
                         button.classList.remove('btn-outline-primary');
                         button.classList.add('btn-outline-secondary');
                         this.audioElement.pause();
-                        this.audioElement.src = '';
+                        this.audioElement.removeAttribute('src');
+                        this.audioElement.load();
                         this.currentAudioSrc = null;
                     }
                 }
