@@ -2158,7 +2158,7 @@
                 this.reportUploaded = false;
                 this.sessionEnding = false;
                 this.init();
-                this.isSpeaking = false;  // ✅ Add this flag
+                this.currentAudioSrc = null;  // src of the question audio in flight
                 // ✅ ADD THESE NEW PROPERTIES:
                 // Voice mapping for each executive (personalized voices)
                 this.executiveVoices = {
@@ -2630,10 +2630,8 @@
                                     this.sessionEnding = true;
                                     this.showSessionEndedMessage();
 
-                                    // Auto-end session after closing message
-                                    setTimeout(() => {
-                                        this.endSession();
-                                    }, 3000);
+                                    // Auto-end session once the closing audio finishes
+                                    this.endSessionWhenAudioFinishes();
                                 } else {
                                     this.showResponseArea(data.follow_up.executive);
                                 }
@@ -2684,12 +2682,40 @@
                 }
             }
             
+            endSessionWhenAudioFinishes() {
+                // Let the closing message audio play out before endSession()
+                // pauses the audio element to generate feedback
+                const audio = this.audioElement;
+                const isPlaying = this.ttsEnabled && audio.src && !audio.paused && !audio.ended;
+
+                if (!isPlaying) {
+                    setTimeout(() => this.endSession(), 3000);
+                    return;
+                }
+
+                let fired = false;
+                const finish = () => {
+                    if (fired) return;
+                    fired = true;
+                    setTimeout(() => this.endSession(), 1000);
+                };
+                audio.addEventListener('ended', finish, { once: true });
+                audio.addEventListener('error', finish, { once: true });
+                setTimeout(finish, 30000); // fallback: never wait forever
+            }
+
             async endSession() {
+                // Guard against double-invocation (auto-end fallback timer,
+                // double-clicks) -- each call costs an AI feedback generation
+                if (this.endSessionInFlight) return;
+                this.endSessionInFlight = true;
+
                 try {
                     // Stop any playing audio
                     if (this.audioElement) {
                         this.audioElement.pause();
                         this.audioElement.src = '';
+                        this.currentAudioSrc = null;
                     }
 
                     // Show loading state on all trigger buttons
@@ -2713,13 +2739,15 @@
                     if (data.status === 'success') {
                         this.showSessionSummary(data.summary);
                     } else {
-                        // Restore buttons on error
+                        // Restore buttons on error and allow retry
+                        this.endSessionInFlight = false;
                         if (endSessionBtn) { endSessionBtn.disabled = false; endSessionBtn.innerHTML = originalEndText; }
                         if (viewSummaryBtn) { viewSummaryBtn.disabled = false; viewSummaryBtn.innerHTML = originalViewText; }
                     }
                 } catch (error) {
                     alert('Error ending session: ' + error.message);
-                    // Restore buttons on error
+                    // Restore buttons on error and allow retry
+                    this.endSessionInFlight = false;
                     const endSessionBtn = document.getElementById('end-session-btn');
                     const viewSummaryBtn = document.querySelector('[onclick="simulator.endSession()"]');
                     if (endSessionBtn) { endSessionBtn.disabled = false; }
@@ -2813,6 +2841,8 @@
                 this.selectedExecutives = [];
                 this.currentExecutive = null;
                 this.sessionEnding = false;
+                this.endSessionInFlight = false;
+                this.currentAudioSrc = null;
 
                 // Uncheck all executive cards (both old and new style)
                 document.querySelectorAll('.executive-card input[type="checkbox"], .exec-card-modern input[type="checkbox"]').forEach(checkbox => {
@@ -2840,6 +2870,8 @@
                 this.currentExecutive = null;
                 this.reportUploaded = false;
                 this.sessionEnding = false;
+                this.endSessionInFlight = false;
+                this.currentAudioSrc = null;
 
                 // Reset form
                 document.getElementById('setup-form').reset();
@@ -2891,37 +2923,46 @@
                     console.log('TTS is disabled');
                     return;
                 }
-    
-                // ✅ PREVENT DUPLICATE CALLS
-                if (this.isSpeaking) {
-                    console.log('⚠️ Already speaking, skipping duplicate call');
+
+                // Inline audio (closing message) or the streaming endpoint,
+                // where playback starts as soon as the first chunks arrive
+                const src = question.tts_url
+                    || (question.question_id ? `/question_tts/${question.question_id}` : null);
+
+                if (!src) {
+                    console.log('⚠️ No TTS available');
                     return;
                 }
-    
+
+                // Skip duplicate calls for the question already loaded, but a
+                // NEW question always replaces whatever is playing -- never
+                // block on a previous stream that stalled or never settled
+                if (this.currentAudioSrc === src) {
+                    console.log('⚠️ Audio for this question already requested, skipping');
+                    return;
+                }
+                this.currentAudioSrc = src;
+
                 try {
-                    this.isSpeaking = true;  // Set flag
-
-                    if (question.tts_url) {
-                        // Inline TTS (closing message)
-                        console.log('🎙️ Playing pre-generated TTS');
-                        this.audioElement.src = question.tts_url;
-                        await this.audioElement.play();
-                    } else if (question.question_id) {
-                        // Point the audio element straight at the streaming
-                        // endpoint: the browser starts playing as soon as the
-                        // first audio chunks arrive, instead of waiting for
-                        // the full file to be generated and downloaded
-                        console.log('🎙️ Streaming TTS for question', question.question_id);
-                        this.audioElement.src = `/question_tts/${question.question_id}`;
-                        await this.audioElement.play();
-                    } else {
-                        console.log('⚠️ No TTS available');
-                    }
-
+                    console.log('🎙️ Playing TTS');
+                    this.audioElement.src = src;
+                    await this.audioElement.play();
                 } catch (error) {
                     console.error('TTS error:', error);
-                } finally {
-                    this.isSpeaking = false;  // Reset flag when done
+                    // One retry for transient failures (e.g. a cold first
+                    // request), unless a newer question has taken over the
+                    // audio element or the browser blocked autoplay
+                    if (this.currentAudioSrc === src && error.name !== 'NotAllowedError') {
+                        try {
+                            await new Promise(resolve => setTimeout(resolve, 800));
+                            if (this.currentAudioSrc !== src) return;
+                            console.log('🔁 Retrying TTS');
+                            this.audioElement.src = src;
+                            await this.audioElement.play();
+                        } catch (retryError) {
+                            console.error('TTS retry failed:', retryError);
+                        }
+                    }
                 }
             }
                 highlightCurrentExecutive(executiveRole) {
@@ -2970,6 +3011,7 @@
                         button.classList.add('btn-outline-secondary');
                         this.audioElement.pause();
                         this.audioElement.src = '';
+                        this.currentAudioSrc = null;
                     }
                 }
                 console.log('TTS toggled:', this.ttsEnabled ? 'ON' : 'OFF');
