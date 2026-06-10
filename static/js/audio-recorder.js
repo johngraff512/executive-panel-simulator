@@ -160,11 +160,13 @@ class AudioRecorder {
             transcriptionDiv.style.display = 'none';
         }
 
-        // Add to main simulator
+        // Add to main simulator: presentQuestion reveals the text in sync
+        // with the audio starting, then the response area opens
         if (window.simulator) {
-            window.simulator.addExecutiveMessage(followUp);
-            window.simulator.speakQuestion(followUp);
-            window.simulator.showResponseArea(followUp.executive);
+            window.simulator.currentExecutive = followUp.executive;
+            window.simulator.presentQuestion(followUp).then(() => {
+                window.simulator.showResponseArea(followUp.executive);
+            });
         }
     }
 
@@ -183,18 +185,14 @@ class AudioRecorder {
             transcriptionDiv.style.display = 'none';
         }
 
-        // Add closing message to chat
+        // Add closing message to chat, revealed in sync with its audio,
+        // then move to the summary once the audio finishes
         if (window.simulator && followUp) {
-            window.simulator.addExecutiveMessage(followUp);
-            window.simulator.speakQuestion(followUp);
-        
-            // Mark session as ending
             window.simulator.sessionEnding = true;
-        
-            // Wait for TTS audio to finish before showing summary
-            setTimeout(() => {
+            window.simulator.presentQuestion(followUp).then(() => {
                 window.simulator.showSessionEndedMessage();
-            }, 8000);
+                window.simulator.endSessionWhenAudioFinishes();
+            });
         }
     }
 

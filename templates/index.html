@@ -323,6 +323,33 @@
             padding: 2rem 0;
             border-top: 1px solid #dee2e6;
         }
+        /* "Executive is preparing a question" indicator (shown until the
+           question audio starts, so voice and text land together) */
+        .thinking-dots {
+            min-height: 1.5rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .thinking-dots span {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--texas-orange);
+            margin-right: 6px;
+            opacity: 0.4;
+            animation: thinkingPulse 1.2s infinite;
+        }
+
+        .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes thinkingPulse {
+            0%, 100% { opacity: 0.3; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+
         /* Highlight active executive */
         .executive-card.active {
             background-color: #fff3cd !important;
@@ -972,7 +999,10 @@
                     </div>
                 </div>
 
-                <form id="setup-form" enctype="multipart/form-data">
+                <!-- novalidate: the wizard validates each step in JS; Chrome's
+                     native validation would block submit on the hidden
+                     required file input ("invalid form control not focusable") -->
+                <form id="setup-form" enctype="multipart/form-data" novalidate>
                     <!-- Step 1: Preset Selection + Upload -->
                     <div class="wizard-step active" data-step="1">
                         <div class="card shadow-sm">
@@ -1030,7 +1060,7 @@
                                     <div class="tw-mt-3">
                                         <small class="text-muted">Supports: Business Plans, Pitch Decks, Case Analyses (up to 50MB)</small>
                                     </div>
-                                    <input type="file" id="report-pdf" name="report-pdf" accept=".pdf" required style="display: none;">
+                                    <input type="file" id="report-pdf" name="report-pdf" accept=".pdf" style="display: none;">
                                 </div>
 
                                 <!-- File Preview -->
@@ -2437,32 +2467,19 @@
                 // Transition to presentation phase with the question already received
                 try {
                     if (firstQuestion) {
-                        this.displayInitialQuestions([firstQuestion]); // Pass as array
+                        const conversationArea = document.getElementById('conversation-area');
+                        conversationArea.innerHTML = '';
+                        this.addWelcomeMessage();
 
-                        // Play TTS for first question (fetched on demand)
-                        await this.speakQuestion(firstQuestion);
+                        this.currentExecutive = firstQuestion.executive;
+                        await this.presentQuestion(firstQuestion);
+                        this.showResponseArea(firstQuestion.executive);
                     } else {
                         throw new Error('No question data received');
                     }
                   } catch (error) {
                     alert('Error starting presentation: ' + error.message);
                     }
-            }
-            
-            displayInitialQuestions(questions) {
-                const conversationArea = document.getElementById('conversation-area');
-                conversationArea.innerHTML = '';
-                
-                // Add welcome message with report confirmation
-                this.addWelcomeMessage();
-                
-                // Add first executive question
-                if (questions.length > 0) {
-                    const firstQuestion = questions[0];
-                    this.addExecutiveMessage(firstQuestion);
-                    this.currentExecutive = firstQuestion.executive;
-                    this.showResponseArea(firstQuestion.executive);
-                }
             }
             
             addWelcomeMessage() {
@@ -2618,12 +2635,11 @@
                         
                         if (data.follow_up) {
                             setTimeout(async () => {
-                                this.addExecutiveMessage(data.follow_up);
                                 this.currentExecutive = data.follow_up.executive;
 
-                                // Play TTS for the question (fetched on demand)
-                                await this.speakQuestion(data.follow_up);
-
+                                // Shows the "preparing" indicator, then reveals
+                                // the text in sync with the audio starting
+                                await this.presentQuestion(data.follow_up);
 
                                 // Check if this is a closing message or session is ending
                                 if (data.follow_up.is_closing || data.session_ending) {
@@ -2635,7 +2651,7 @@
                                 } else {
                                     this.showResponseArea(data.follow_up.executive);
                                 }
-                            }, 1000);
+                            }, 300);
                         }
                     } else {
                         throw new Error(data.error || 'Failed to get response');
@@ -2918,6 +2934,66 @@
                 conversationArea.scrollTop = conversationArea.scrollHeight;
             }
             // ✅ ADD THESE TWO NEW METHODS HERE:
+            async presentQuestion(question) {
+                // Hold the question text behind a "preparing" indicator until
+                // the audio actually starts, so the voice and the text land
+                // together -- like a live panelist speaking
+                const hasAudio = this.ttsEnabled && (question.tts_url || question.question_id);
+
+                if (!hasAudio) {
+                    this.addExecutiveMessage(question);
+                    return;
+                }
+
+                this.showThinkingIndicator(question);
+                try {
+                    // speakQuestion resolves when playback starts (or gives up
+                    // after a retry); the race ensures a stalled stream never
+                    // holds the question text hostage
+                    await Promise.race([
+                        this.speakQuestion(question),
+                        new Promise(resolve => setTimeout(resolve, 8000))
+                    ]);
+                } finally {
+                    this.hideThinkingIndicator();
+                    this.addExecutiveMessage(question);
+                }
+            }
+
+            showThinkingIndicator(question) {
+                this.hideThinkingIndicator();
+                const conversationArea = document.getElementById('conversation-area');
+                const el = document.createElement('div');
+                el.id = 'thinking-indicator';
+                el.className = 'executive-message';
+
+                const headshotHTML = question.image
+                    ? `<img src="/static/images/executives/${question.image}.png" alt="${question.name}" class="executive-headshot" onerror="this.style.display='none'">`
+                    : '';
+
+                el.innerHTML = `
+                    <div class="executive-message-container">
+                        ${headshotHTML}
+                        <div class="executive-message-content">
+                            <div class="executive-header">
+                                <strong>${question.name}</strong>
+                                <span class="executive-title">${question.title}</span>
+                            </div>
+                            <div class="executive-question thinking-dots">
+                                <span></span><span></span><span></span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                conversationArea.appendChild(el);
+                this.scrollToBottom();
+            }
+
+            hideThinkingIndicator() {
+                document.getElementById('thinking-indicator')?.remove();
+            }
+
             async speakQuestion(question) {
                 if (!this.ttsEnabled) {
                     console.log('TTS is disabled');

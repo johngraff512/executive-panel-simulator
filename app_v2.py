@@ -15,6 +15,7 @@ import json
 import os
 import random
 import tempfile
+import threading
 from datetime import datetime
 from io import BytesIO
 from xml.sax.saxutils import escape
@@ -1166,6 +1167,78 @@ EXECUTIVE_VOICES = {
 }
 
 
+# --- TTS pre-generation -----------------------------------------------------
+# Audio generation starts in a background thread the moment a question is
+# created, so by the time the browser asks /question_tts for it (a few hundred
+# ms later) the first chunks are already available. The route FOLLOWS the
+# in-progress job instead of starting a second generation, so each question is
+# synthesized exactly once. In-memory state is fine: gunicorn runs 1 worker.
+
+
+class _TtsJob:
+    """Chunks of one question's audio, filled in by a background thread."""
+
+    def __init__(self):
+        self.chunks = []
+        self.done = False
+        self.error = None
+        self.cond = threading.Condition()
+
+
+_TTS_JOBS = {}  # question_id -> _TtsJob
+_TTS_JOBS_LOCK = threading.Lock()
+_TTS_JOBS_MAX = 40  # ~50-150KB per job; cap keeps memory bounded
+
+
+def pregenerate_question_tts(question_id, question_text, executive_name):
+    """Start generating a question's TTS audio in the background."""
+    if not openai_available or not openai_client:
+        return
+
+    job = _TtsJob()
+    with _TTS_JOBS_LOCK:
+        _TTS_JOBS[question_id] = job
+        while len(_TTS_JOBS) > _TTS_JOBS_MAX:
+            # Evict oldest (dict preserves insertion order); active readers
+            # keep their own reference, so eviction never breaks a stream.
+            _TTS_JOBS.pop(next(iter(_TTS_JOBS)))
+
+    def work():
+        try:
+            voice = EXECUTIVE_VOICES.get(executive_name, "alloy")
+            with openai_client.audio.speech.with_streaming_response.create(
+                model="tts-1", voice=voice, input=question_text[:500]
+            ) as tts_response:
+                for chunk in tts_response.iter_bytes(chunk_size=4096):
+                    with job.cond:
+                        job.chunks.append(chunk)
+                        job.cond.notify_all()
+            print(f"🎙️ Pre-generated TTS for question {question_id}")
+        except Exception as e:
+            job.error = e
+            print(f"⚠️ TTS pre-generation failed for question {question_id}: {e}")
+        finally:
+            with job.cond:
+                job.done = True
+                job.cond.notify_all()
+
+    threading.Thread(target=work, daemon=True).start()
+
+
+def _follow_tts_job(job):
+    """Yield a job's audio chunks as they arrive (works mid-generation)."""
+    index = 0
+    while True:
+        with job.cond:
+            ready = job.cond.wait_for(lambda i=index: len(job.chunks) > i or job.done, timeout=60)
+            new_chunks = job.chunks[index:]
+            done = job.done
+        index += len(new_chunks)
+        yield from new_chunks
+        if not new_chunks and (done or not ready):
+            break
+
+
 def generate_tts_audio(text, executive_name):
     """Generate TTS audio and return as base64 data URL"""
     if not openai_available or not openai_client:
@@ -1466,6 +1539,7 @@ def launch_panel():
             question_text=first_question,
             is_followup=False,
         )
+        pregenerate_question_tts(first_question_id, first_question, exec_name)
 
         # Update session with first topic used
         db.update_session(sid, used_topics=[first_topic], current_question_count=1)
@@ -1717,6 +1791,7 @@ def respond_to_executive():
                 question_text=followup_question,
                 is_followup=True,
             )
+            pregenerate_question_tts(followup_question_id, followup_question, exec_name)
 
             print(f"🔄 {exec_role} asking follow-up question")
 
@@ -1803,6 +1878,7 @@ def respond_to_executive():
             question_text=next_question,
             is_followup=False,
         )
+        pregenerate_question_tts(next_question_id, next_question, exec_name)
 
         # Update session
         used_topics.append(next_topic)
@@ -1902,6 +1978,7 @@ def respond_to_executive_audio():
                     question_text=followup_question,
                     is_followup=True,
                 )
+                pregenerate_question_tts(followup_question_id, followup_question, exec_name)
 
                 print(f"🔄 {exec_role} asking follow-up question")
 
@@ -1985,6 +2062,7 @@ def respond_to_executive_audio():
                 question_text=next_question,
                 is_followup=False,
             )
+            pregenerate_question_tts(next_question_id, next_question, exec_name)
 
             used_topics.append(next_topic)
             db.update_session(sid, used_topics=used_topics, current_question_count=next_count)
@@ -2047,10 +2125,19 @@ def question_tts(question_id):
         if not question:
             return jsonify({"status": "error", "error": "Question not found"}), 404
 
-        voice = EXECUTIVE_VOICES.get(question["executive_name"], "alloy")
+        audio_headers = {"Content-Disposition": "inline; filename=question.mp3", "Cache-Control": "no-cache"}
 
-        # Stream chunks through as OpenAI generates them so the browser can
-        # start playback immediately instead of waiting for the full file.
+        # Preferred path: follow the pre-generation job started when the
+        # question was created -- audio is already (partly) synthesized by
+        # the time the browser asks for it.
+        with _TTS_JOBS_LOCK:
+            job = _TTS_JOBS.get(question_id)
+        if job is not None and not (job.error and not job.chunks):
+            return Response(_follow_tts_job(job), mimetype="audio/mpeg", headers=audio_headers)
+
+        # Fallback (no job: worker restarted, job evicted, or pre-generation
+        # failed): stream live from OpenAI as chunks are generated.
+        voice = EXECUTIVE_VOICES.get(question["executive_name"], "alloy")
         upstream = openai_client.audio.speech.with_streaming_response.create(
             model="tts-1", voice=voice, input=question["question_text"][:500]
         )
@@ -2059,11 +2146,7 @@ def question_tts(question_id):
             with upstream as tts_response:
                 yield from tts_response.iter_bytes(chunk_size=4096)
 
-        return Response(
-            generate(),
-            mimetype="audio/mpeg",
-            headers={"Content-Disposition": "inline; filename=question.mp3", "Cache-Control": "no-cache"},
-        )
+        return Response(generate(), mimetype="audio/mpeg", headers=audio_headers)
 
     except Exception as e:
         print(f"❌ TTS Error: {e}")
