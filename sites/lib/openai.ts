@@ -10,7 +10,7 @@ const PORTKEY_API_BASE = "https://api.portkey.ai/v1";
 export type AIProvider = "portkey" | "openai" | "none";
 
 type RequestContext = {
-  feature: "file_upload" | "pdf_analysis" | "panel_turn" | "transcription" | "speech";
+  feature: "file_upload" | "pdf_analysis" | "panel_turn" | "transcription" | "speech" | "session_feedback";
   ownerId?: string;
 };
 
@@ -31,6 +31,29 @@ export type PanelQuestion = {
 export type DocumentAnalysis = {
   findings: Finding[];
   firstQuestion: PanelQuestion;
+};
+
+export type TranscriptTurn = {
+  number: number;
+  executive: string;
+  executiveName: string;
+  question: string;
+  response: string;
+  responseType: "text" | "audio";
+  isFollowup: boolean;
+};
+
+export type FeedbackItem = {
+  title: string;
+  detail: string;
+  questionNumbers: number[];
+};
+
+export type SessionFeedback = {
+  summary: string;
+  strengths: FeedbackItem[];
+  improvements: FeedbackItem[];
+  nextPracticeGoal: string;
 };
 
 type ResponsesPayload = {
@@ -347,6 +370,127 @@ export async function synthesizeQuestion(input: {
     },
     { feature: "speech", ownerId: input.ownerId },
   );
+}
+
+const feedbackItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    title: { type: "string" },
+    detail: { type: "string" },
+    questionNumbers: {
+      type: "array",
+      minItems: 1,
+      maxItems: 3,
+      items: { type: "integer" },
+    },
+  },
+  required: ["title", "detail", "questionNumbers"],
+};
+
+const feedbackSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    summary: { type: "string" },
+    strengths: {
+      type: "array",
+      minItems: 2,
+      maxItems: 3,
+      items: feedbackItemSchema,
+    },
+    improvements: {
+      type: "array",
+      minItems: 2,
+      maxItems: 3,
+      items: feedbackItemSchema,
+    },
+    nextPracticeGoal: { type: "string" },
+  },
+  required: ["summary", "strengths", "improvements", "nextPracticeGoal"],
+};
+
+export async function generateSessionFeedback(input: {
+  ownerId: string;
+  companyName: string;
+  reportType: string;
+  findings: Finding[];
+  transcript: TranscriptTurn[];
+}): Promise<SessionFeedback> {
+  const { OPENAI_FEEDBACK_MODEL, OPENAI_TURN_MODEL } = bindings();
+  const model = OPENAI_FEEDBACK_MODEL || OPENAI_TURN_MODEL || "gpt-4o";
+  const supportsReasoningControls = model.startsWith("gpt-5");
+  const safetyIdentifier = await ownerSafetyId(input.ownerId);
+  const itemCount = input.transcript.length <= 4 ? 2 : 3;
+  const response = await openAIRequest(
+    "/responses",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        ...(supportsReasoningControls ? { reasoning: { effort: "low" } } : {}),
+        store: false,
+        safety_identifier: safetyIdentifier,
+        instructions:
+          "You are an expert executive communication coach at a top business school. Evaluate only the substance visible in the supplied transcript and report findings. Produce warm, candid, evidence-based coaching. Every strength and improvement must cite the question number or numbers containing the evidence and explain the specific behavior to repeat or change. Do not give generic praise, invent report facts, infer vocal tone or confidence from a text transcript, or claim the student said something that is not present. Keep titles to 3-6 words and details to 2-3 concise sentences.",
+        input: JSON.stringify({
+          companyName: input.companyName,
+          reportType: input.reportType,
+          requestedItemsPerSection: itemCount,
+          reportFindings: input.findings,
+          transcript: input.transcript,
+        }),
+        text: {
+          ...(supportsReasoningControls ? { verbosity: "low" } : {}),
+          format: {
+            type: "json_schema",
+            name: "executive_panel_session_feedback",
+            strict: true,
+            schema: feedbackSchema,
+          },
+        },
+      }),
+    },
+    { feature: "session_feedback", ownerId: input.ownerId },
+  );
+  return JSON.parse(
+    responseText((await response.json()) as ResponsesPayload),
+  ) as SessionFeedback;
+}
+
+export function demoSessionFeedback(transcript: TranscriptTurn[]): SessionFeedback {
+  const finalQuestion = Math.max(1, transcript.length);
+  return {
+    summary:
+      "You completed the full panel and responded across several executive perspectives. Review the transcript for places where a direct claim could be paired with stronger report evidence.",
+    strengths: [
+      {
+        title: "Stayed With the Panel",
+        detail: "You responded to each executive question and carried the recommendation through the complete session.",
+        questionNumbers: [1],
+      },
+      {
+        title: "Addressed Multiple Perspectives",
+        detail: "Your responses engaged more than one functional concern rather than treating the recommendation as a single-issue decision.",
+        questionNumbers: [finalQuestion],
+      },
+    ],
+    improvements: [
+      {
+        title: "Lead With the Answer",
+        detail: "On your next attempt, begin each response with a one-sentence answer before adding evidence and context.",
+        questionNumbers: [1],
+      },
+      {
+        title: "Make Evidence Explicit",
+        detail: "Name the report fact, assumption, or metric supporting each major claim so the panel can distinguish evidence from judgment.",
+        questionNumbers: [finalQuestion],
+      },
+    ],
+    nextPracticeGoal:
+      "Use a three-part response: direct answer, one concrete piece of evidence, and the implication for the executive decision.",
+  };
 }
 
 export async function transcribeAudio(

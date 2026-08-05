@@ -15,6 +15,13 @@
       "when": 1785872013629,
       "tag": "0001_outstanding_quicksilver",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785953581525,
+      "tag": "0002_right_karnak",
+      "breakpoints": true
     }
   ]
 }

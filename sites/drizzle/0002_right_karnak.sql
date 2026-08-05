@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `feedback_json` text;

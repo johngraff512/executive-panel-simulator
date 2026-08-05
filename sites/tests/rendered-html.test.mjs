@@ -82,3 +82,29 @@ test("prefers Portkey and adds privacy-preserving tracking metadata", async () =
   assert.match(envExample, /PORTKEY_VIRTUAL_KEY=/);
   assert.match(envExample, /OPENAI_SPEECH_MODEL=gpt-4o-mini-tts/);
 });
+
+test("reveals a non-editable transcript and specific coaching after completion", async () => {
+  const [simulator, provider, respondRoute, migration, schema] = await Promise.all([
+    readFile(new URL("../app/SimulatorSpike.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/openai.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/respond/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0002_right_karnak.sql", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(simulator, /AI performance feedback/);
+  assert.match(simulator, /What you did well/);
+  assert.match(simulator, /Areas for improvement/);
+  assert.match(simulator, /Session transcript/);
+  assert.match(simulator, /revealed only after the session/);
+  assert.match(simulator, /cannot be edited/);
+  assert.match(simulator, /Print \/ save as PDF/);
+  assert.match(provider, /generateSessionFeedback/);
+  assert.match(provider, /Every strength and improvement must cite the question number/);
+  assert.match(provider, /Do not give generic praise/);
+  assert.match(provider, /session_feedback/);
+  assert.match(respondRoute, /responseClaim\.meta\.changes/);
+  assert.match(respondRoute, /feedback_json/);
+  assert.match(migration, /ADD `feedback_json` text/);
+  assert.match(schema, /feedbackJson:\s*text\("feedback_json"\)/);
+});

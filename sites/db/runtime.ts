@@ -12,6 +12,7 @@ export type SessionRecord = {
   current_turn: number;
   status: string;
   analysis_json: string | null;
+  feedback_json: string | null;
 };
 
 export type TurnRecord = {
@@ -37,6 +38,7 @@ export type RuntimeBindings = {
   OPENAI_TURN_MODEL?: string;
   OPENAI_TRANSCRIBE_MODEL?: string;
   OPENAI_SPEECH_MODEL?: string;
+  OPENAI_FEEDBACK_MODEL?: string;
 };
 
 export function bindings(): RuntimeBindings {
@@ -70,6 +72,7 @@ export async function ensureSchema(): Promise<void> {
       allow_followups INTEGER NOT NULL DEFAULT 1,
       current_turn INTEGER NOT NULL DEFAULT 1,
       status TEXT NOT NULL DEFAULT 'active',
+      feedback_json TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),

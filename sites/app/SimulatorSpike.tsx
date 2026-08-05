@@ -43,7 +43,42 @@ type PanelResponse = {
   error?: string;
   complete: boolean;
   questionNumber: number;
-  question: Question;
+  question?: Question;
+  result?: SessionResult;
+};
+
+type TranscriptTurn = {
+  number: number;
+  executive: string;
+  executiveName: string;
+  question: string;
+  response: string;
+  responseType: "text" | "audio";
+  isFollowup: boolean;
+};
+
+type FeedbackItem = {
+  title: string;
+  detail: string;
+  questionNumbers: number[];
+};
+
+type SessionFeedback = {
+  summary: string;
+  strengths: FeedbackItem[];
+  improvements: FeedbackItem[];
+  nextPracticeGoal: string;
+};
+
+type SessionResult = {
+  companyName: string;
+  reportType: string;
+  questionCount: number;
+  executiveCount: number;
+  voiceResponseCount: number;
+  transcript: TranscriptTurn[];
+  feedback: SessionFeedback | null;
+  feedbackUnavailable: boolean;
 };
 
 const executives: Executive[] = [
@@ -97,6 +132,7 @@ export function SimulatorSpike() {
   const [liveMode, setLiveMode] = useState(false);
   const [voiceReady, setVoiceReady] = useState(false);
   const [naturalVoiceReady, setNaturalVoiceReady] = useState(false);
+  const [sessionResult, setSessionResult] = useState<SessionResult | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const mediaStream = useRef<MediaStream | null>(null);
   const audioChunks = useRef<Blob[]>([]);
@@ -338,10 +374,13 @@ export function SimulatorSpike() {
       "The panel could not continue",
     );
     if (data.complete) {
+      if (!data.result) throw new Error("The session ended without a transcript.");
+      setSessionResult(data.result);
       setPhase("complete");
-      window.speechSynthesis?.cancel();
+      stopQuestionAudio();
       return;
     }
+    if (!data.question) throw new Error("The panel returned no next question.");
     setQuestion(data.question);
     setQuestionNumber(data.questionNumber);
     await speakQuestion(data.question);
@@ -360,6 +399,7 @@ export function SimulatorSpike() {
     setError("");
     setVoiceReady(false);
     setNaturalVoiceReady(false);
+    setSessionResult(null);
   }
 
   const activeExecutive = currentExecutive(question);
@@ -561,14 +601,88 @@ export function SimulatorSpike() {
         </section>
       )}
 
-      {phase === "complete" && (
-        <section className="center-state complete-state">
-          <span className="completion-mark">✓</span>
-          <span className="section-kicker">Session complete</span>
-          <h1>You stayed in the room.</h1>
-          <p>This spike intentionally ends at session completion. Scored feedback is the next parity slice; saved-attempt history remains a later development option.</p>
-          <div className="completion-grid"><div><b>{questionLimit}</b><span>questions faced</span></div><div><b>{selected.length}</b><span>executives engaged</span></div><div><b>{liveMode ? "Live" : "Demo"}</b><span>simulation mode</span></div></div>
-          <button className="primary-action compact" type="button" onClick={restart}>Start another pressure test</button>
+      {phase === "complete" && sessionResult && (
+        <section className="results-shell">
+          <div className="results-hero">
+            <span className="completion-mark">✓</span>
+            <div>
+              <span className="section-kicker">Session complete</span>
+              <h1>You stayed in the room.</h1>
+              <p>{sessionResult.companyName} · {sessionResult.reportType}</p>
+            </div>
+            <div className="completion-grid">
+              <div><b>{sessionResult.questionCount}</b><span>questions faced</span></div>
+              <div><b>{sessionResult.executiveCount}</b><span>executives engaged</span></div>
+              <div><b>{sessionResult.voiceResponseCount}</b><span>spoken responses</span></div>
+            </div>
+          </div>
+
+          <section className="feedback-section" aria-labelledby="feedback-title">
+            <div className="results-heading">
+              <div><span className="section-kicker">Executive communication coaching</span><h2 id="feedback-title">AI performance feedback</h2></div>
+              <small>Generated from this session’s transcript and report analysis</small>
+            </div>
+            {sessionResult.feedback ? (
+              <>
+                <p className="feedback-summary">{sessionResult.feedback.summary}</p>
+                <div className="feedback-grid">
+                  <article className="feedback-card strength-card">
+                    <h3>What you did well</h3>
+                    {sessionResult.feedback.strengths.map((item) => (
+                      <div key={`${item.title}-${item.questionNumbers.join("-")}`}>
+                        <span>{item.questionNumbers.map((number) => `Q${number}`).join(" · ")}</span>
+                        <h4>{item.title}</h4>
+                        <p>{item.detail}</p>
+                      </div>
+                    ))}
+                  </article>
+                  <article className="feedback-card improvement-card">
+                    <h3>Areas for improvement</h3>
+                    {sessionResult.feedback.improvements.map((item) => (
+                      <div key={`${item.title}-${item.questionNumbers.join("-")}`}>
+                        <span>{item.questionNumbers.map((number) => `Q${number}`).join(" · ")}</span>
+                        <h4>{item.title}</h4>
+                        <p>{item.detail}</p>
+                      </div>
+                    ))}
+                  </article>
+                </div>
+                <div className="practice-goal"><span>Next practice goal</span><p>{sessionResult.feedback.nextPracticeGoal}</p></div>
+              </>
+            ) : (
+              <div className="feedback-unavailable" role="status">
+                <h3>Feedback could not be generated</h3>
+                <p>Your complete transcript is still available below for review.</p>
+              </div>
+            )}
+          </section>
+
+          <section className="transcript-section" aria-labelledby="transcript-title">
+            <div className="results-heading">
+              <div><span className="section-kicker">Review after the room</span><h2 id="transcript-title">Session transcript</h2></div>
+              <button type="button" className="print-button" onClick={() => window.print()}>Print / save as PDF</button>
+            </div>
+            <p className="transcript-note">The transcript is revealed only after the session. Spoken responses appear exactly as transcribed and cannot be edited.</p>
+            <div className="transcript-list">
+              {sessionResult.transcript.map((turn) => {
+                const executive = executives.find((item) => item.role === turn.executive) ?? executives[0];
+                return (
+                  <article key={turn.number} className="transcript-turn">
+                    <div className="transcript-speaker">
+                      <Image src={executive.image} alt="" width={46} height={46} unoptimized />
+                      <div><span>Question {turn.number}{turn.isFollowup ? " · Follow-up" : ""}</span><h3>{turn.executiveName}</h3><small>{turn.executive}</small></div>
+                    </div>
+                    <blockquote>{turn.question}</blockquote>
+                    <div className="transcript-answer"><span>Your {turn.responseType === "audio" ? "spoken response · transcribed" : "written response"}</span><p>{turn.response}</p></div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <div className="results-actions">
+            <button className="primary-action compact" type="button" onClick={restart}>Start another pressure test</button>
+          </div>
         </section>
       )}
     </main>

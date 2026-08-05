@@ -40,6 +40,7 @@ export const sessions = sqliteTable(
       .default(true),
     currentTurn: integer("current_turn").notNull().default(1),
     status: text("status").notNull().default("active"),
+    feedbackJson: text("feedback_json"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },

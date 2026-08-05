@@ -5,11 +5,16 @@ import {
   requestOwnerId,
 } from "../../../db/runtime";
 import {
+  demoSessionFeedback,
   demoNextQuestion,
+  executiveName,
   generateNextQuestion,
+  generateSessionFeedback,
   hasAIProvider,
   transcribeAudio,
   type Finding,
+  type SessionFeedback,
+  type TranscriptTurn,
 } from "../../../lib/openai";
 
 export const dynamic = "force-dynamic";
@@ -96,12 +101,18 @@ export async function POST(request: Request) {
       );
     }
 
-    await runtime.DB.prepare(
+    const responseClaim = await runtime.DB.prepare(
       `UPDATE turns SET response_text = ?, response_type = ?
        WHERE id = ? AND session_id = ? AND response_text IS NULL`,
     )
       .bind(responseText, incoming.responseType, latestTurn.id, incoming.sessionId)
       .run();
+    if (!responseClaim.meta.changes) {
+      return Response.json(
+        { error: "This response was already submitted." },
+        { status: 409 },
+      );
+    }
 
     const nextTurnNumber = record.session.current_turn + 1;
     if (nextTurnNumber > record.session.question_limit) {
@@ -110,11 +121,56 @@ export async function POST(request: Request) {
       )
         .bind(incoming.sessionId, ownerId)
         .run();
+
+      const transcript: TranscriptTurn[] = record.turns.map((turn) => ({
+        number: turn.turn_number,
+        executive: turn.executive,
+        executiveName: executiveName(turn.executive),
+        question: turn.question,
+        response:
+          turn.id === latestTurn.id ? responseText : turn.response_text || "",
+        responseType: (turn.id === latestTurn.id
+          ? incoming.responseType
+          : turn.response_type || "text") as "text" | "audio",
+        isFollowup: Boolean(turn.is_followup),
+      }));
+      const findings = JSON.parse(record.session.analysis_json || "[]") as Finding[];
+      let feedback: SessionFeedback | null = null;
+      let feedbackUnavailable = false;
+      try {
+        feedback = hasAIProvider()
+          ? await generateSessionFeedback({
+              ownerId,
+              companyName: record.session.company_name,
+              reportType: record.session.report_type,
+              findings,
+              transcript,
+            })
+          : demoSessionFeedback(transcript);
+        await runtime.DB.prepare(
+          "UPDATE sessions SET feedback_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?",
+        )
+          .bind(JSON.stringify(feedback), incoming.sessionId, ownerId)
+          .run();
+      } catch {
+        feedbackUnavailable = true;
+      }
+
       return Response.json({
         complete: true,
         responseAccepted: true,
         responseType: incoming.responseType,
         questionNumber: record.session.current_turn,
+        result: {
+          companyName: record.session.company_name,
+          reportType: record.session.report_type,
+          questionCount: transcript.length,
+          executiveCount: new Set(transcript.map((turn) => turn.executive)).size,
+          voiceResponseCount: transcript.filter((turn) => turn.responseType === "audio").length,
+          transcript,
+          feedback,
+          feedbackUnavailable,
+        },
       });
     }
 
