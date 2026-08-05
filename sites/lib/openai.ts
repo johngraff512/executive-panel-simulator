@@ -56,6 +56,9 @@ export type SessionFeedback = {
   nextPracticeGoal: string;
 };
 
+export const CEO_CLOSING_MESSAGE =
+  "Thank you for submitting your analysis and recommendations, and for answering our questions today.";
+
 type ResponsesPayload = {
   output_text?: string;
   output?: Array<{
@@ -433,7 +436,7 @@ export async function generateSessionFeedback(input: {
         store: false,
         safety_identifier: safetyIdentifier,
         instructions:
-          "You are an expert executive communication coach at a top business school. Evaluate only the substance visible in the supplied transcript and report findings. Produce warm, candid, evidence-based coaching. Every strength and improvement must cite the question number or numbers containing the evidence and explain the specific behavior to repeat or change. Do not give generic praise, invent report facts, infer vocal tone or confidence from a text transcript, or claim the student said something that is not present. Keep titles to 3-6 words and details to 2-3 concise sentences.",
+          "You are an expert executive communication coach at a top business school. The executive named in each transcript turn ASKED the question; the presenter/student supplied every response. Address all feedback directly to the presenter using second person (you/your). Never describe an executive as having given an answer, and never say that the CEO, CFO, CTO, CMO, or COO should improve something. Executive titles may only identify who asked a question—for example, 'In your response to the CFO’s question…'. Evaluate only the substance visible in the supplied transcript and report findings. Produce warm, candid, evidence-based coaching. Every strength and improvement must cite the question number or numbers containing the evidence and explain the specific behavior to repeat or change. Do not give generic praise, invent report facts, infer vocal tone or confidence from a text transcript, or claim the presenter said something that is not present. Keep titles to 3-6 words and details to 2-3 concise sentences.",
         input: JSON.stringify({
           companyName: input.companyName,
           reportType: input.reportType,
@@ -454,9 +457,36 @@ export async function generateSessionFeedback(input: {
     },
     { feature: "session_feedback", ownerId: input.ownerId },
   );
-  return JSON.parse(
+  return feedbackForPresenter(JSON.parse(
     responseText((await response.json()) as ResponsesPayload),
-  ) as SessionFeedback;
+  ) as SessionFeedback);
+}
+
+function presenterVoice(text: string): string {
+  return text
+    .replace(
+      /\bThe (CEO|CFO|CTO|CMO|COO)\s+/g,
+      (_, role: string) => `In your response to the ${role}'s question, you `,
+    )
+    .replace(
+      /\b(CEO|CFO|CTO|CMO|COO)\s+(should|could)\s+/g,
+      (_, role: string, modal: string) =>
+        `In your response to the ${role}'s question, you ${modal} `,
+    );
+}
+
+function feedbackForPresenter(feedback: SessionFeedback): SessionFeedback {
+  const rewriteItem = (item: FeedbackItem): FeedbackItem => ({
+    ...item,
+    detail: presenterVoice(item.detail),
+  });
+  return {
+    ...feedback,
+    summary: presenterVoice(feedback.summary),
+    strengths: feedback.strengths.map(rewriteItem),
+    improvements: feedback.improvements.map(rewriteItem),
+    nextPracticeGoal: presenterVoice(feedback.nextPracticeGoal),
+  };
 }
 
 export function demoSessionFeedback(transcript: TranscriptTurn[]): SessionFeedback {

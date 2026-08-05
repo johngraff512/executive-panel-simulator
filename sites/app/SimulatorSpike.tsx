@@ -79,6 +79,7 @@ type SessionResult = {
   transcript: TranscriptTurn[];
   feedback: SessionFeedback | null;
   feedbackUnavailable: boolean;
+  closingMessage: string;
 };
 
 const executives: Executive[] = [
@@ -112,7 +113,7 @@ async function readApiResponse<T extends { error?: string }>(
 }
 
 export function SimulatorSpike() {
-  const [phase, setPhase] = useState<"setup" | "preparing" | "ready" | "session" | "complete">("setup");
+  const [phase, setPhase] = useState<"setup" | "preparing" | "ready" | "session" | "closing" | "complete">("setup");
   const [health, setHealth] = useState<Health | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [reportType, setReportType] = useState("Strategic recommendation");
@@ -138,6 +139,7 @@ export function SimulatorSpike() {
   const audioChunks = useRef<Blob[]>([]);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeQuestionAudio = useRef<HTMLAudioElement | null>(null);
+  const finishClosingAudio = useRef<(() => void) | null>(null);
   const speechUrls = useRef(new Map<string, string>());
   const speechLoads = useRef(new Map<string, Promise<string | null>>());
 
@@ -269,6 +271,61 @@ export function SimulatorSpike() {
     browserSpeak(questionToSpeak);
   }
 
+  function showFeedback() {
+    finishClosingAudio.current?.();
+    finishClosingAudio.current = null;
+    stopQuestionAudio();
+    setPhase("complete");
+  }
+
+  async function playClosing(message: string) {
+    stopQuestionAudio();
+    if (liveMode) {
+      try {
+        const response = await fetch("/api/speech", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, kind: "closing" }),
+        });
+        if (response.ok) {
+          const url = URL.createObjectURL(await response.blob());
+          const audio = new Audio(url);
+          activeQuestionAudio.current = audio;
+          await new Promise<void>((resolve) => {
+            let finished = false;
+            const finish = () => {
+              if (finished) return;
+              finished = true;
+              finishClosingAudio.current = null;
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            finishClosingAudio.current = finish;
+            audio.addEventListener("ended", finish, { once: true });
+            audio.addEventListener("error", finish, { once: true });
+            void audio.play().catch(finish);
+          });
+          showFeedback();
+          return;
+        }
+      } catch {
+        // Fall through to the device voice when hosted speech is unavailable.
+      }
+    }
+
+    if ("speechSynthesis" in window) {
+      await new Promise<void>((resolve) => {
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.rate = 0.92;
+        utterance.pitch = 1.02;
+        utterance.onend = () => resolve();
+        utterance.onerror = () => resolve();
+        window.speechSynthesis.speak(utterance);
+      });
+    }
+    showFeedback();
+  }
+
   function enterRoom() {
     if (!question || !voiceReady) return;
     setPhase("session");
@@ -376,8 +433,9 @@ export function SimulatorSpike() {
     if (data.complete) {
       if (!data.result) throw new Error("The session ended without a transcript.");
       setSessionResult(data.result);
-      setPhase("complete");
+      setPhase("closing");
       stopQuestionAudio();
+      await playClosing(data.result.closingMessage);
       return;
     }
     if (!data.question) throw new Error("The panel returned no next question.");
@@ -598,6 +656,17 @@ export function SimulatorSpike() {
               {error && <p className="error-banner" role="alert">{error}</p>}
             </div>
           </div>
+        </section>
+      )}
+
+      {phase === "closing" && sessionResult && (
+        <section className="center-state closing-state" aria-live="polite">
+          <Image src="/executives/sarah_chen.png" alt="Sarah Chen" width={86} height={86} unoptimized />
+          <span className="section-kicker">The CEO closes the meeting</span>
+          <h1>Sarah Chen</h1>
+          <blockquote>“{sessionResult.closingMessage}”</blockquote>
+          <p>Your transcript and coaching feedback are ready.</p>
+          <button className="primary-action compact" type="button" onClick={showFeedback}>Continue to feedback →</button>
         </section>
       )}
 

@@ -7,6 +7,7 @@ import {
 import {
   demoSessionFeedback,
   demoNextQuestion,
+  CEO_CLOSING_MESSAGE,
   executiveName,
   generateNextQuestion,
   generateSessionFeedback,
@@ -170,6 +171,7 @@ export async function POST(request: Request) {
           transcript,
           feedback,
           feedbackUnavailable,
+          closingMessage: CEO_CLOSING_MESSAGE,
         },
       });
     }

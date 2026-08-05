@@ -3,7 +3,11 @@ import {
   getSession,
   requestOwnerId,
 } from "../../../db/runtime";
-import { hasAIProvider, synthesizeQuestion } from "../../../lib/openai";
+import {
+  CEO_CLOSING_MESSAGE,
+  hasAIProvider,
+  synthesizeQuestion,
+} from "../../../lib/openai";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +20,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = (await request.json()) as { sessionId?: string };
+    const body = (await request.json()) as {
+      sessionId?: string;
+      kind?: "question" | "closing";
+    };
     if (!body.sessionId) {
       return Response.json({ error: "Session not found." }, { status: 400 });
     }
@@ -25,14 +32,18 @@ export async function POST(request: Request) {
     const ownerId = requestOwnerId(request);
     const record = await getSession(body.sessionId, ownerId);
     const latestTurn = record?.turns.at(-1);
-    if (!record || !latestTurn || record.session.status !== "active") {
+    const isClosing = body.kind === "closing";
+    const validStatus = isClosing
+      ? record?.session.status === "complete"
+      : record?.session.status === "active";
+    if (!record || !latestTurn || !validStatus) {
       return Response.json({ error: "Active question not found." }, { status: 404 });
     }
 
     const audio = await synthesizeQuestion({
       ownerId,
-      executive: latestTurn.executive,
-      question: latestTurn.question,
+      executive: isClosing ? "CEO" : latestTurn.executive,
+      question: isClosing ? CEO_CLOSING_MESSAGE : latestTurn.question,
     });
     return new Response(audio.body, {
       headers: {

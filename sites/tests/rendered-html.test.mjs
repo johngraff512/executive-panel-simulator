@@ -84,10 +84,11 @@ test("prefers Portkey and adds privacy-preserving tracking metadata", async () =
 });
 
 test("reveals a non-editable transcript and specific coaching after completion", async () => {
-  const [simulator, provider, respondRoute, migration, schema] = await Promise.all([
+  const [simulator, provider, respondRoute, speechRoute, migration, schema] = await Promise.all([
     readFile(new URL("../app/SimulatorSpike.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/openai.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/respond/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/speech/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0002_right_karnak.sql", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
   ]);
@@ -102,9 +103,20 @@ test("reveals a non-editable transcript and specific coaching after completion",
   assert.match(provider, /generateSessionFeedback/);
   assert.match(provider, /Every strength and improvement must cite the question number/);
   assert.match(provider, /Do not give generic praise/);
+  assert.match(provider, /the presenter\/student supplied every response/);
+  assert.match(provider, /Address all feedback directly to the presenter using second person/);
+  assert.match(provider, /feedbackForPresenter/);
+  assert.match(provider, /In your response to the \$\{role\}'s question, you/);
   assert.match(provider, /session_feedback/);
+  assert.match(provider, /Thank you for submitting your analysis and recommendations, and for answering our questions today/);
   assert.match(respondRoute, /responseClaim\.meta\.changes/);
   assert.match(respondRoute, /feedback_json/);
+  assert.match(respondRoute, /closingMessage:\s*CEO_CLOSING_MESSAGE/);
+  assert.match(speechRoute, /body\.kind === "closing"/);
+  assert.match(speechRoute, /executive:\s*isClosing \? "CEO"/);
+  assert.match(simulator, /The CEO closes the meeting/);
+  assert.match(simulator, /Continue to feedback/);
+  assert.match(simulator, /playClosing/);
   assert.match(migration, /ADD `feedback_json` text/);
   assert.match(schema, /feedbackJson:\s*text\("feedback_json"\)/);
 });
