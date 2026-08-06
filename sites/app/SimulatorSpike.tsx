@@ -118,6 +118,22 @@ export function SimulatorSpike() {
   const [companyName, setCompanyName] = useState("");
   const [reportType, setReportType] = useState("Strategic recommendation");
   const [selected, setSelected] = useState(["CEO", "CFO", "COO"]);
+
+  function printReport() {
+    if (!sessionResult) return;
+
+    const previousTitle = document.title;
+    const safeCompanyName = sessionResult.companyName
+      .replace(/[\\/:*?"<>|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || "Session Report";
+
+    document.title = `Executive Panel Simulator _ ${safeCompanyName}`;
+    window.addEventListener("afterprint", () => {
+      document.title = previousTitle;
+    }, { once: true });
+    window.print();
+  }
   const [questionLimit, setQuestionLimit] = useState(6);
   const [allowFollowups, setAllowFollowups] = useState(true);
   const [file, setFile] = useState<File | null>(null);
@@ -672,19 +688,14 @@ export function SimulatorSpike() {
 
       {phase === "complete" && sessionResult && (
         <section className="results-shell">
-          <div className="results-hero">
-            <span className="completion-mark">✓</span>
+          <header className="report-masthead">
             <div>
-              <span className="section-kicker">Session complete</span>
-              <h1>You stayed in the room.</h1>
-              <p>{sessionResult.companyName} · {sessionResult.reportType}</p>
+              <span className="section-kicker">Executive Panel Simulator</span>
+              <h1>{sessionResult.companyName}</h1>
+              <p>{sessionResult.reportType} · After-session report</p>
             </div>
-            <div className="completion-grid">
-              <div><b>{sessionResult.questionCount}</b><span>questions faced</span></div>
-              <div><b>{sessionResult.executiveCount}</b><span>executives engaged</span></div>
-              <div><b>{sessionResult.voiceResponseCount}</b><span>spoken responses</span></div>
-            </div>
-          </div>
+            <button type="button" className="print-button" onClick={printReport}>Print / save as PDF</button>
+          </header>
 
           <section className="feedback-section" aria-labelledby="feedback-title">
             <div className="results-heading">
@@ -728,8 +739,7 @@ export function SimulatorSpike() {
 
           <section className="transcript-section" aria-labelledby="transcript-title">
             <div className="results-heading">
-              <div><span className="section-kicker">Review after the room</span><h2 id="transcript-title">Session transcript</h2></div>
-              <button type="button" className="print-button" onClick={() => window.print()}>Print / save as PDF</button>
+              <div><span className="section-kicker">Questions and responses</span><h2 id="transcript-title">Session transcript</h2></div>
             </div>
             <p className="transcript-note">The transcript is revealed only after the session. Spoken responses appear exactly as transcribed and cannot be edited.</p>
             <div className="transcript-list">
@@ -739,7 +749,7 @@ export function SimulatorSpike() {
                   <article key={turn.number} className="transcript-turn">
                     <div className="transcript-speaker">
                       <Image src={executive.image} alt="" width={46} height={46} unoptimized />
-                      <div><span>Question {turn.number}{turn.isFollowup ? " · Follow-up" : ""}</span><h3>{turn.executiveName}</h3><small>{turn.executive}</small></div>
+                      <div><span>Question {turn.number}{turn.isFollowup ? " · Follow-up" : ""}</span><h3>{turn.executiveName}</h3><small>{turn.executive} · Panel question</small></div>
                     </div>
                     <blockquote>{turn.question}</blockquote>
                     <div className="transcript-answer"><span>Your {turn.responseType === "audio" ? "spoken response · transcribed" : "written response"}</span><p>{turn.response}</p></div>

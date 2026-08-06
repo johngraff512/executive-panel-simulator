@@ -84,8 +84,9 @@ test("prefers Portkey and adds privacy-preserving tracking metadata", async () =
 });
 
 test("reveals a non-editable transcript and specific coaching after completion", async () => {
-  const [simulator, provider, respondRoute, speechRoute, migration, schema] = await Promise.all([
+  const [simulator, styles, provider, respondRoute, speechRoute, migration, schema] = await Promise.all([
     readFile(new URL("../app/SimulatorSpike.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../lib/openai.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/respond/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/speech/route.ts", import.meta.url), "utf8"),
@@ -97,6 +98,11 @@ test("reveals a non-editable transcript and specific coaching after completion",
   assert.match(simulator, /What you did well/);
   assert.match(simulator, /Areas for improvement/);
   assert.match(simulator, /Session transcript/);
+  assert.match(simulator, /className="report-masthead"/);
+  assert.match(simulator, /<h1>\{sessionResult\.companyName\}<\/h1>/);
+  assert.doesNotMatch(simulator, /You stayed in the room/);
+  assert.match(simulator, /Executive Panel Simulator _ \$\{safeCompanyName\}/);
+  assert.match(styles, /@page \{ size: letter/);
   assert.match(simulator, /revealed only after the session/);
   assert.match(simulator, /cannot be edited/);
   assert.match(simulator, /Print \/ save as PDF/);
