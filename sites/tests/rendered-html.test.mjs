@@ -19,6 +19,25 @@ test("contains the executive panel product and simulation constraint", async () 
   assert.doesNotMatch(`${page}${simulator}${layout}`, /codex-preview|react-loading-skeleton/i);
 });
 
+test("uses clear setup labels and exposes executive focus tooltips", async () => {
+  const [simulator, styles] = await Promise.all([
+    readFile(new URL("../app/SimulatorSpike.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(simulator, />Presentation Type<\/label>/);
+  assert.match(simulator, />Number of Questions<\/label>/);
+  assert.match(simulator, />Select Your Executive Panel<\/span>/);
+  assert.match(simulator, /aria-describedby=\{`\$\{executive\.role\.toLowerCase\(\)\}-focus`\}/);
+  assert.match(simulator, /className="executive-tooltip" role="tooltip"/);
+  assert.match(simulator, /Strategy and enterprise value/);
+  assert.match(simulator, /Economics, risk, and return/);
+  assert.match(simulator, /Feasibility and technology/);
+  assert.match(simulator, /Customers and differentiation/);
+  assert.match(simulator, /Execution and operations/);
+  assert.match(styles, /button:hover \.executive-tooltip, \.executive-picker button:focus-visible \.executive-tooltip/);
+});
+
 test("declares Sites storage and removes disposable starter UI", async () => {
   const [hosting, packageJson] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),

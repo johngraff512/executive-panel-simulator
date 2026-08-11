@@ -526,7 +526,7 @@ export function SimulatorSpike() {
 
             <div className="two-column">
               <div>
-                <label className="field-label" htmlFor="reportType">Presentation</label>
+                <label className="field-label" htmlFor="reportType">Presentation Type</label>
                 <select id="reportType" value={reportType} onChange={(event) => setReportType(event.target.value)}>
                   <option>Strategic recommendation</option>
                   <option>Case analysis</option>
@@ -535,7 +535,7 @@ export function SimulatorSpike() {
                 </select>
               </div>
               <div>
-                <label className="field-label" htmlFor="questionLimit">Questions</label>
+                <label className="field-label" htmlFor="questionLimit">Number of Questions</label>
                 <select id="questionLimit" value={questionLimit} onChange={(event) => setQuestionLimit(Number(event.target.value))}>
                   <option value={4}>4 · Quick pressure test</option>
                   <option value={6}>6 · Standard session</option>
@@ -544,12 +544,22 @@ export function SimulatorSpike() {
               </div>
             </div>
 
-            <span className="field-label">Executive panel</span>
+            <span className="field-label">Select Your Executive Panel</span>
             <div className="executive-picker">
               {executives.map((executive) => (
-                <button key={executive.role} type="button" className={selected.includes(executive.role) ? "selected" : ""} onClick={() => toggleExecutive(executive.role)} aria-pressed={selected.includes(executive.role)}>
+                <button
+                  key={executive.role}
+                  type="button"
+                  className={selected.includes(executive.role) ? "selected" : ""}
+                  onClick={() => toggleExecutive(executive.role)}
+                  aria-pressed={selected.includes(executive.role)}
+                  aria-describedby={`${executive.role.toLowerCase()}-focus`}
+                >
                   <Image src={executive.image} alt="" width={43} height={43} unoptimized />
                   <span><b>{executive.role}</b><small>{executive.name}</small></span>
+                  <span id={`${executive.role.toLowerCase()}-focus`} className="executive-tooltip" role="tooltip">
+                    {executive.focus}
+                  </span>
                 </button>
               ))}
             </div>

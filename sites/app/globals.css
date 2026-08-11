@@ -51,12 +51,14 @@ button { cursor: pointer; }
 .setup-card input:focus, .setup-card select:focus, .text-control textarea:focus { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(191,87,0,.11); }
 .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .executive-picker { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-.executive-picker button { min-width: 0; padding: 9px 5px; display: flex; flex-direction: column; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--muted); }
+.executive-picker button { position: relative; min-width: 0; padding: 9px 5px; display: flex; flex-direction: column; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--muted); }
 .executive-picker button.selected { border-color: var(--orange); background: #fff5ea; color: var(--ink); box-shadow: 0 0 0 2px rgba(191,87,0,.08); }
 .executive-picker img { width: 43px; height: 43px; border-radius: 50%; object-fit: cover; filter: grayscale(.12); }
 .executive-picker span { min-width: 0; display: flex; flex-direction: column; }
 .executive-picker b { font-size: 12px; }
 .executive-picker small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.executive-tooltip { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 50%; width: max-content; max-width: min(220px, calc(100vw - 32px)); padding: 7px 9px; border-radius: 8px; background: var(--charcoal); color: #fff; font-size: 11px; font-weight: 650; line-height: 1.35; opacity: 0; pointer-events: none; text-align: center; transform: translate(-50%, 4px); transition: opacity .15s ease, transform .15s ease; visibility: hidden; white-space: normal; }
+.executive-picker button:hover .executive-tooltip, .executive-picker button:focus-visible .executive-tooltip { opacity: 1; transform: translate(-50%, 0); visibility: visible; }
 .upload-field { margin-top: 20px; min-height: 75px; padding: 14px 16px; display: flex; align-items: center; gap: 13px; border: 1px dashed #c6b8aa; border-radius: 13px; background: #faf7f2; cursor: pointer; }
 .upload-field input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .upload-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: var(--charcoal); color: #fff; font-size: 20px; }
@@ -207,6 +209,7 @@ button { cursor: pointer; }
   .setup-card { padding: 21px 17px; border-radius: 18px; }
   .two-column { grid-template-columns: 1fr; }
   .executive-picker { grid-template-columns: repeat(3, 1fr); }
+  .executive-tooltip { bottom: auto; top: calc(100% + 8px); }
   .session-layout { width: calc(100% - 24px); padding: 20px 0; }
   .panel-list { grid-template-columns: 1fr 1fr; }
   .panel-rail h2 { margin-bottom: 15px; }
