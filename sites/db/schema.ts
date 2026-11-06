@@ -59,6 +59,7 @@ export const turns = sqliteTable(
     question: text("question").notNull(),
     responseText: text("response_text"),
     responseType: text("response_type"),
+    submissionId: text("submission_id"),
     isFollowup: integer("is_followup", { mode: "boolean" })
       .notNull()
       .default(false),

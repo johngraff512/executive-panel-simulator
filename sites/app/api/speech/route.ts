@@ -13,13 +13,6 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
-    if (!hasAIProvider()) {
-      return Response.json(
-        { error: "Natural executive voices require a live AI provider." },
-        { status: 503 },
-      );
-    }
-
     const body = (await request.json()) as {
       sessionId?: string;
       kind?: "question" | "closing";
@@ -38,6 +31,12 @@ export async function POST(request: Request) {
       : record?.session.status === "active";
     if (!record || !latestTurn || !validStatus) {
       return Response.json({ error: "Active question not found." }, { status: 404 });
+    }
+    if (!hasAIProvider() || !record.session.openai_file_id) {
+      return Response.json(
+        { error: "Natural executive voices are unavailable while this session is using demo logic." },
+        { status: 503 },
+      );
     }
 
     const audio = await synthesizeQuestion({

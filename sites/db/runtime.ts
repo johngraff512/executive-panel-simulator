@@ -12,6 +12,7 @@ export type SessionRecord = {
   current_turn: number;
   status: string;
   analysis_json: string | null;
+  openai_file_id: string | null;
   feedback_json: string | null;
 };
 
@@ -22,6 +23,7 @@ export type TurnRecord = {
   question: string;
   response_text: string | null;
   response_type: string | null;
+  submission_id: string | null;
   is_followup: number;
 };
 
@@ -84,6 +86,7 @@ export async function ensureSchema(): Promise<void> {
       question TEXT NOT NULL,
       response_text TEXT,
       response_type TEXT,
+      submission_id TEXT,
       is_followup INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
@@ -97,6 +100,15 @@ export async function ensureSchema(): Promise<void> {
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_turns_session_number ON turns(session_id, turn_number)",
     ),
   ]);
+
+  const turnColumns = await DB.prepare("PRAGMA table_info(turns)").all<{ name: string }>();
+  const hasSubmissionId = turnColumns.results.some((column) => column.name === "submission_id");
+  if (!hasSubmissionId) {
+    await DB.prepare("ALTER TABLE turns ADD COLUMN submission_id TEXT").run();
+  }
+  await DB.prepare(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_turns_submission_id ON turns(session_id, submission_id)",
+  ).run();
 }
 
 export function requestOwnerId(request: Request): string {
@@ -122,7 +134,7 @@ export async function getSession(
   if (!DB) throw new Error("D1 binding DB is unavailable");
 
   const session = await DB.prepare(
-    `SELECT s.*, d.analysis_json
+    `SELECT s.*, d.analysis_json, d.openai_file_id
      FROM sessions s
      JOIN documents d ON d.id = s.document_id
      WHERE s.id = ? AND s.owner_id = ?`,
@@ -133,7 +145,7 @@ export async function getSession(
 
   const result = await DB.prepare(
     `SELECT id, turn_number, executive, question, response_text,
-            response_type, is_followup
+            response_type, submission_id, is_followup
      FROM turns WHERE session_id = ? ORDER BY turn_number ASC`,
   )
     .bind(sessionId)

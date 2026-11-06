@@ -112,6 +112,21 @@ async function readApiResponse<T extends { error?: string }>(
   throw new Error(responseText || fallbackMessage);
 }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("The request took too long. Your answer is safe to retry.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export function SimulatorSpike() {
   const [phase, setPhase] = useState<"setup" | "preparing" | "ready" | "session" | "closing" | "complete">("setup");
   const [health, setHealth] = useState<Health | null>(null);
@@ -158,6 +173,14 @@ export function SimulatorSpike() {
   const finishClosingAudio = useRef<(() => void) | null>(null);
   const speechUrls = useRef(new Map<string, string>());
   const speechLoads = useRef(new Map<string, Promise<string | null>>());
+  const pendingSubmission = useRef<{ id: string; fingerprint: string } | null>(null);
+
+  function submissionId(fingerprint: string) {
+    if (pendingSubmission.current?.fingerprint === fingerprint) return pendingSubmission.current.id;
+    const id = crypto.randomUUID();
+    pendingSubmission.current = { id, fingerprint };
+    return id;
+  }
 
   useEffect(() => {
     const speechUrlCache = speechUrls.current;
@@ -204,6 +227,7 @@ export function SimulatorSpike() {
       setQuestion(data.question);
       setQuestionNumber(data.questionNumber);
       setLiveMode(data.mode === "live");
+      setResponseMode(data.mode === "live" ? "voice" : "text");
       setVoiceReady(data.mode !== "live");
       setNaturalVoiceReady(false);
       setPhase("ready");
@@ -246,11 +270,11 @@ export function SimulatorSpike() {
     const pending = speechLoads.current.get(key);
     if (pending) return pending;
 
-    const load = fetch("/api/speech", {
+    const load = fetchWithTimeout("/api/speech", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: id }),
-    })
+    }, 30_000)
       .then(async (response) => {
         if (!response.ok) return null;
         const url = URL.createObjectURL(await response.blob());
@@ -354,12 +378,14 @@ export function SimulatorSpike() {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/respond", {
+      const idempotencyKey = submissionId(`text:${questionNumber}:${responseText}`);
+      const response = await fetchWithTimeout("/api/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, response: responseText }),
-      });
+        body: JSON.stringify({ sessionId, response: responseText, submissionId: idempotencyKey }),
+      }, 70_000);
       await handlePanelResponse(response);
+      pendingSubmission.current = null;
       setTextResponse("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to submit the response");
@@ -430,10 +456,13 @@ export function SimulatorSpike() {
     setError("");
     const form = new FormData();
     form.set("sessionId", sessionId);
+    const idempotencyKey = submissionId(`audio:${questionNumber}:${audio.size}:${audio.type}`);
+    form.set("submissionId", idempotencyKey);
     form.set("audio", audio, `spoken-response.${extension}`);
     try {
-      const response = await fetch("/api/respond", { method: "POST", body: form });
+      const response = await fetchWithTimeout("/api/respond", { method: "POST", body: form }, 70_000);
       await handlePanelResponse(response);
+      pendingSubmission.current = null;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to submit the spoken response");
     } finally {
@@ -474,6 +503,7 @@ export function SimulatorSpike() {
     setVoiceReady(false);
     setNaturalVoiceReady(false);
     setSessionResult(null);
+    pendingSubmission.current = null;
   }
 
   const activeExecutive = currentExecutive(question);
@@ -491,9 +521,9 @@ export function SimulatorSpike() {
         </div>
         <div className="runtime-pill" data-live={health?.mode === "live"}>
           <span /> {health?.provider === "portkey"
-            ? "Portkey connected"
+            ? "Portkey configured"
             : health?.provider === "openai"
-              ? "OpenAI connected"
+              ? "OpenAI configured"
               : "Feasibility mode"}
         </div>
       </header>
@@ -770,6 +800,7 @@ export function SimulatorSpike() {
           </section>
 
           <div className="results-actions">
+            <button type="button" className="print-button" onClick={printReport}>Print / save as PDF</button>
             <button className="primary-action compact" type="button" onClick={restart}>Start another pressure test</button>
           </div>
         </section>

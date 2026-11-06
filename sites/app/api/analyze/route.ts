@@ -109,16 +109,25 @@ export async function POST(request: Request) {
 
     let analysis = demoAnalysis(companyName, executives);
     let openaiFileId: string | null = null;
-    const live = hasAIProvider();
+    let live = hasAIProvider();
     if (live) {
-      openaiFileId = await uploadOpenAIFile(file, ownerId);
-      analysis = await analyzeDocument({
-        fileId: openaiFileId,
-        ownerId,
-        companyName,
-        reportType,
-        executives,
-      });
+      try {
+        openaiFileId = await uploadOpenAIFile(file, ownerId);
+        analysis = await analyzeDocument({
+          fileId: openaiFileId,
+          ownerId,
+          companyName,
+          reportType,
+          executives,
+        });
+      } catch (error) {
+        live = false;
+        openaiFileId = null;
+        console.warn(
+          "Live AI preparation failed; continuing in demonstration mode.",
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
 
     await runtime.DB.batch([
@@ -142,7 +151,7 @@ export async function POST(request: Request) {
     return Response.json({
       sessionId,
       mode: live ? "live" : "demonstration",
-      provider: configuredAIProvider(),
+      provider: live ? configuredAIProvider() : "none",
       questionNumber: 1,
       questionLimit,
       question: analysis.firstQuestion,

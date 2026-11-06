@@ -116,10 +116,57 @@ async function openAIRequest(
     throw new Error("No AI provider credentials are configured");
   }
 
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers,
-  });
+  const timeoutByFeature: Record<RequestContext["feature"], number> = {
+    file_upload: 45_000,
+    pdf_analysis: 90_000,
+    panel_turn: 45_000,
+    transcription: 45_000,
+    speech: 30_000,
+    session_feedback: 60_000,
+  };
+  const maxAttempts = context.feature === "file_upload" ? 1 : 2;
+  let response: Response | null = null;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutByFeature[context.feature]);
+    try {
+      response = await fetch(`${baseUrl}${path}`, {
+        ...init,
+        headers,
+        signal: controller.signal,
+      });
+      const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+      console.info(JSON.stringify({
+        event: "ai_request",
+        provider,
+        feature: context.feature,
+        attempt,
+        durationMs: Date.now() - startedAt,
+        status: response.status,
+        requestId: response.headers.get("x-portkey-request-id") || response.headers.get("x-request-id"),
+      }));
+      if (!retryable || attempt === maxAttempts) break;
+      await response.body?.cancel();
+    } catch (error) {
+      lastError = error;
+      console.error(JSON.stringify({
+        event: "ai_request_error",
+        provider,
+        feature: context.feature,
+        attempt,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.name : "UnknownError",
+      }));
+      if (attempt === maxAttempts) throw new Error(`${provider === "portkey" ? "Portkey" : "OpenAI"} ${context.feature} timed out or was unavailable`);
+    } finally {
+      clearTimeout(timeout);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+  }
+  if (!response) throw lastError ?? new Error("AI request failed");
   if (!response.ok) {
     const detail = await response.text();
     const providerName = provider === "portkey" ? "Portkey" : "OpenAI";

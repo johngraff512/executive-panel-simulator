@@ -102,6 +102,48 @@ test("prefers Portkey and adds privacy-preserving tracking metadata", async () =
   assert.match(envExample, /OPENAI_SPEECH_MODEL=gpt-4o-mini-tts/);
 });
 
+test("falls back cleanly when the configured AI route is unavailable", async () => {
+  const [simulator, analyzeRoute, respondRoute, speechRoute, runtime] = await Promise.all([
+    readFile(new URL("../app/SimulatorSpike.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/analyze/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/respond/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/speech/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/runtime.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(analyzeRoute, /continuing in demonstration mode/);
+  assert.match(analyzeRoute, /provider:\s*live \? configuredAIProvider\(\) : "none"/);
+  assert.match(respondRoute, /Boolean\(record\.session\.openai_file_id\)/);
+  assert.match(speechRoute, /!record\.session\.openai_file_id/);
+  assert.match(runtime, /d\.openai_file_id/);
+  assert.match(simulator, /setResponseMode\(data\.mode === "live" \? "voice" : "text"\)/);
+  assert.match(simulator, /Portkey configured/);
+});
+
+test("bounds slow requests and makes response retries idempotent and observable", async () => {
+  const [simulator, provider, respondRoute, runtime, schema] = await Promise.all([
+    readFile(new URL("../app/SimulatorSpike.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/openai.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/respond/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/runtime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(simulator, /fetchWithTimeout/);
+  assert.match(simulator, /Your answer is safe to retry/);
+  assert.match(simulator, /crypto\.randomUUID\(\)/);
+  assert.match(simulator, /submissionId:[ \t]*idempotencyKey/);
+  assert.match(provider, /timeoutByFeature/);
+  assert.match(provider, /response\.status === 429/);
+  assert.match(provider, /event:\s*"ai_request"/);
+  assert.match(respondRoute, /panel_response_replayed/);
+  assert.match(respondRoute, /panel_response_resume/);
+  assert.match(respondRoute, /panel_response_error/);
+  assert.match(runtime, /submission_id/);
+  assert.match(runtime, /idx_turns_submission_id/);
+  assert.match(schema, /submissionId:\s*text\("submission_id"\)/);
+});
+
 test("reveals a non-editable transcript and specific coaching after completion", async () => {
   const [simulator, styles, provider, respondRoute, speechRoute, migration, schema] = await Promise.all([
     readFile(new URL("../app/SimulatorSpike.tsx", import.meta.url), "utf8"),
